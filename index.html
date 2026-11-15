@@ -1,0 +1,4423 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>VANTICK - Catálogo 3D Interactivo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<style>
+  :root {
+    --vt-cream: #FDFBF4;
+    --vt-gold-light: #F3C969;
+    --vt-gold: #D49B2A;
+    --vt-gold-dark: #8C5E14;
+    --vt-espresso: #140C05;
+    --vt-glass-bg: rgba(32, 20, 10, 0.46);
+    --vt-glass-border: rgba(253, 251, 244, 0.24);
+    --vt-glass-highlight: rgba(243, 201, 105, 0.22);
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    overflow: hidden;
+    background: #0B0603;
+    color: var(--vt-cream);
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #app-viewport {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    background: #0D0703;
+    transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+                height 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+                border-radius 0.35s ease;
+  }
+
+  #app-viewport.mobile-frame {
+    border-radius: 28px;
+    border: 2px solid rgba(243, 201, 105, 0.35);
+    box-shadow: 0 0 0 9999px rgba(5, 3, 1, 0.88), 0 20px 60px rgba(0, 0, 0, 0.95);
+  }
+
+  /* Iluminación de fondo acelerada por GPU */
+  #bg-radial-glow {
+    position: absolute;
+    inset: -15%;
+    z-index: 0;
+    pointer-events: none;
+    color: #472A12;
+    background: radial-gradient(circle at 50% 42%, currentColor 0%, transparent 68%);
+    transition: color 0.45s ease;
+    will-change: color;
+    transform: translateZ(0);
+  }
+
+  #canvas-container {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    cursor: grab;
+    transform: translateZ(0);
+    touch-action: none;
+  }
+  #canvas-container:active {
+    cursor: grabbing;
+  }
+
+  #bg-giant-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 0;
+    font-size: 13vw;
+    font-weight: 900;
+    letter-spacing: 6px;
+    line-height: 0.88;
+    text-align: center;
+    color: rgba(243, 201, 105, 0.055);
+    pointer-events: none;
+    opacity: 0;
+    transform: scale(0.92) translateZ(0);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    will-change: opacity, transform;
+  }
+  #app-viewport.compact-ui #bg-giant-text {
+    font-size: 52px;
+  }
+
+  /* Contenedor de nombres y cápsula divisoria "Combos" en 3. COLECCIÓN */
+  #lineup-labels-container {
+    position: absolute;
+    inset: 0;
+    z-index: 45;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    will-change: opacity;
+    overflow: hidden;
+  }
+  #lineup-labels-container.visible {
+    opacity: 1;
+  }
+  .lineup-item-label {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: auto;
+    cursor: pointer;
+    padding: 6.5px 13px;
+    border-radius: 14px;
+    background: rgba(28, 16, 7, 0.74);
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    border: 1px solid rgba(243, 201, 105, 0.45);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(253, 251, 244, 0.25);
+    color: var(--vt-cream);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-align: center;
+    white-space: nowrap;
+    will-change: transform, opacity;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+  }
+  .lineup-item-label:hover {
+    background: linear-gradient(135deg, #FDFBF4 0%, #F3C969 100%);
+    color: #1A0E04;
+    border-color: #FDFBF4;
+  }
+
+  /* División transparente en forma de cápsula "Combos" en 3. COLECCIÓN */
+  .lineup-section-capsule {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+    padding: 9px 38px;
+    border-radius: 999px;
+    background: rgba(34, 20, 9, 0.48);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1.5px solid rgba(243, 201, 105, 0.58);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), inset 0 1px 2px rgba(253, 251, 244, 0.35);
+    color: var(--vt-cream);
+    font-size: 13.5px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    will-change: transform, opacity;
+  }
+
+  #app-viewport.compact-ui .lineup-item-label {
+    padding: 4.5px 8.5px;
+    font-size: 8.8px;
+    border-radius: 10px;
+    max-width: 142px;
+    white-space: normal;
+    line-height: 1.15;
+  }
+  #app-viewport.compact-ui .lineup-section-capsule {
+    padding: 6.5px 26px;
+    font-size: 11px;
+    letter-spacing: 2.2px;
+  }
+
+  /* Indicador lateral de desplazamiento vertical en 3. COLECCIÓN */
+  #lineup-scroll-ui {
+    position: absolute;
+    right: 16px;
+    top: 52%;
+    transform: translateY(-50%) translateZ(0);
+    z-index: 52;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  #lineup-scroll-ui.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .scroll-track {
+    width: 6px;
+    height: 130px;
+    border-radius: 999px;
+    background: rgba(253, 251, 244, 0.12);
+    border: 1px solid rgba(243, 201, 105, 0.3);
+    position: relative;
+    overflow: hidden;
+  }
+  .scroll-thumb {
+    width: 100%;
+    height: 38px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #FDFBF4 0%, #F3C969 100%);
+    box-shadow: 0 0 10px rgba(243, 201, 105, 0.6);
+    will-change: transform;
+  }
+  .scroll-step-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid rgba(243, 201, 105, 0.45);
+    background: var(--vt-glass-bg);
+    color: var(--vt-cream);
+    font-size: 13px;
+    font-weight: 900;
+    cursor: pointer;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+    transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease;
+  }
+  .scroll-step-btn:hover {
+    background: linear-gradient(135deg, #FDFBF4 0%, #F3C969 100%);
+    color: #1A0E04;
+    transform: scale(1.08);
+  }
+  #app-viewport.compact-ui #lineup-scroll-ui {
+    right: 7px;
+    top: 54%;
+  }
+  #app-viewport.compact-ui .scroll-track {
+    height: 95px;
+    width: 5px;
+  }
+  #app-viewport.compact-ui .scroll-thumb {
+    height: 28px;
+  }
+  #app-viewport.compact-ui .scroll-step-btn {
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
+  }
+
+  /* Botón lateral en forma de cápsula "Combos" en 1. CARRUSEL */
+  #carousel-side-switch {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%) translateZ(0);
+    z-index: 54;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity 0.25s ease;
+  }
+  #carousel-side-switch.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .capsule-switch-btn {
+    padding: 12px 22px;
+    border-radius: 999px;
+    border: 1.5px solid var(--vt-glass-border);
+    background: var(--vt-glass-bg);
+    color: var(--vt-cream);
+    cursor: pointer;
+    font-weight: 900;
+    font-size: 11.5px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.58), inset 0 1px 2px var(--vt-glass-highlight);
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    white-space: nowrap;
+  }
+  .capsule-switch-btn:hover, .capsule-switch-btn.active-cat {
+    background: linear-gradient(135deg, #FDFBF4 0%, #F3C969 100%);
+    color: #1A0F05;
+    border-color: #FDFBF4;
+    transform: scale(1.06);
+    box-shadow: 0 0 22px rgba(243, 201, 105, 0.65);
+  }
+  #app-viewport.compact-ui #carousel-side-switch {
+    right: 10px;
+    top: 46%;
+  }
+  #app-viewport.compact-ui .capsule-switch-btn {
+    padding: 9px 14px;
+    font-size: 9.5px;
+    letter-spacing: 1px;
+  }
+
+  /* Indicador superior */
+  #loader-badge {
+    position: absolute;
+    top: 88px;
+    left: 50%;
+    transform: translateX(-50%) translateZ(0);
+    background: var(--vt-glass-bg);
+    border: 1px solid var(--vt-glass-border);
+    color: var(--vt-cream);
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    z-index: 60;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    transition: opacity 0.35s ease;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  #app-viewport.compact-ui #loader-badge {
+    top: 102px;
+    font-size: 8.5px;
+    padding: 4px 10px;
+  }
+
+  /* Barra superior con efecto vidrio esmerilado */
+  header {
+    position: absolute;
+    top: 12px;
+    left: 2%;
+    width: 96%;
+    padding: 9px 18px;
+    border-radius: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 55;
+    background: var(--vt-glass-bg);
+    backdrop-filter: blur(16px) saturate(170%);
+    -webkit-backdrop-filter: blur(16px) saturate(170%);
+    border: 1px solid var(--vt-glass-border);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), inset 0 1px 1px var(--vt-glass-highlight);
+    transform: translateZ(0);
+  }
+
+  /* Logo VANTICK dentro de la silueta del boleto */
+  .ticket-logo-badge {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 236px;
+    height: 54px;
+    padding: 8px 24px 8px 66px;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+  }
+  .ticket-logo-badge:hover {
+    transform: scale(1.02);
+  }
+  .ticket-logo-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .ticket-logo-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    text-align: center;
+  }
+  .ticket-logo-title {
+    font-size: 18.5px;
+    font-weight: 900;
+    letter-spacing: 3.2px;
+    line-height: 1.05;
+    background: linear-gradient(90deg, #FDFBF4 0%, #F3C969 48%, #D49B2A 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 2px 10px rgba(212, 155, 42, 0.22);
+    white-space: nowrap;
+  }
+  .ticket-logo-sub {
+    font-size: 7px;
+    font-weight: 800;
+    letter-spacing: 1.9px;
+    color: var(--vt-gold-light);
+    margin-top: 3px;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0.95;
+  }
+
+  .header-controls {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .nav-btn {
+    background: rgba(253, 251, 244, 0.08);
+    border: 1px solid rgba(253, 251, 244, 0.24);
+    color: var(--vt-cream);
+    padding: 8px 14px;
+    border-radius: 22px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.6px;
+    transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+    white-space: nowrap;
+  }
+  .nav-btn.active, .nav-btn:hover {
+    background: linear-gradient(135deg, #FDFBF4 0%, #F3C969 100%);
+    color: #1A0F05;
+    border-color: #FDFBF4;
+    box-shadow: 0 4px 14px rgba(212, 155, 42, 0.38);
+  }
+
+  .cart-header-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(243, 201, 105, 0.14);
+    border: 1.5px solid rgba(243, 201, 105, 0.45);
+    color: var(--vt-cream);
+    padding: 7px 14px;
+    border-radius: 22px;
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32);
+    white-space: nowrap;
+    will-change: transform;
+  }
+  .cart-header-btn:hover, .cart-header-btn.active {
+    background: linear-gradient(135deg, #FDFBF4 0%, #F3C969 100%);
+    color: #1A0F05;
+    border-color: #FDFBF4;
+    box-shadow: 0 4px 16px rgba(243, 201, 105, 0.52);
+  }
+  .cart-header-btn svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    fill: none;
+    flex-shrink: 0;
+  }
+  .cart-badge-count {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #F3C969 0%, #D49B2A 100%);
+    color: #1A0E04;
+    font-size: 10.5px;
+    font-weight: 900;
+    border: 1.5px solid #FDFBF4;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    line-height: 1;
+  }
+  .cart-badge-count.show {
+    display: inline-flex;
+  }
+  .cart-header-btn:hover .cart-badge-count,
+  .cart-header-btn.active .cart-badge-count {
+    background: #1A0E04;
+    color: #F3C969;
+    border-color: #1A0E04;
+  }
+
+  .format-btn {
+    background: linear-gradient(135deg, #8C5E14, #D49B2A);
+    border: 1px solid rgba(253, 251, 244, 0.45);
+    color: var(--vt-cream);
+    padding: 8px 14px;
+    border-radius: 22px;
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 11px;
+    letter-spacing: 0.6px;
+    box-shadow: 0 4px 14px rgba(140, 94, 20, 0.5);
+    transition: filter 0.18s ease;
+    white-space: nowrap;
+  }
+  .format-btn:hover {
+    filter: brightness(1.12);
+  }
+
+  /* Cabecera compacta en Modo Celular / Vertical */
+  #app-viewport.compact-ui header {
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    top: 8px;
+  }
+  #app-viewport.compact-ui .ticket-logo-badge {
+    min-width: 198px;
+    height: 44px;
+    padding: 6px 18px 6px 54px;
+  }
+  #app-viewport.compact-ui .ticket-logo-title {
+    font-size: 15px;
+    letter-spacing: 2.5px;
+  }
+  #app-viewport.compact-ui .ticket-logo-sub {
+    font-size: 6px;
+    letter-spacing: 1.5px;
+    margin-top: 2px;
+  }
+  #app-viewport.compact-ui .header-controls {
+    gap: 4px;
+    width: 100%;
+  }
+  #app-viewport.compact-ui .nav-btn {
+    padding: 5px 8px;
+    font-size: 8.6px;
+    letter-spacing: 0.2px;
+  }
+  #app-viewport.compact-ui .cart-header-btn {
+    padding: 4.5px 9px;
+    font-size: 8.6px;
+    gap: 4px;
+  }
+  #app-viewport.compact-ui .cart-header-btn svg {
+    width: 12.5px;
+    height: 12.5px;
+  }
+  #app-viewport.compact-ui .cart-badge-count {
+    min-width: 15px;
+    height: 15px;
+    font-size: 8.5px;
+    padding: 0 3.5px;
+  }
+  #app-viewport.compact-ui .format-btn {
+    padding: 5px 8px;
+    font-size: 8.6px;
+  }
+
+  /* Controles inferiores del carrusel */
+  #carousel-ui {
+    position: absolute;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%) translateZ(0);
+    z-index: 55;
+    text-align: center;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    width: max-content;
+    max-width: 95%;
+    background: var(--vt-glass-bg);
+    backdrop-filter: blur(16px) saturate(170%);
+    -webkit-backdrop-filter: blur(16px) saturate(170%);
+    padding: 12px 20px;
+    border-radius: 24px;
+    border: 1px solid var(--vt-glass-border);
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.65), inset 0 1px 1px var(--vt-glass-highlight);
+    will-change: opacity, transform;
+  }
+  .banner-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .flavor-banner {
+    background: linear-gradient(135deg, rgba(74, 44, 17, 0.88), rgba(34, 19, 7, 0.94));
+    padding: 9px 24px;
+    transform: skewX(-8deg);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+    cursor: pointer;
+    border: 1px solid rgba(243, 201, 105, 0.45);
+    border-radius: 8px;
+    transition: transform 0.18s ease;
+    min-width: 240px;
+  }
+  .flavor-banner:hover {
+    transform: skewX(-8deg) scale(1.03);
+  }
+  .flavor-banner h2 {
+    transform: skewX(8deg);
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    color: var(--vt-cream);
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.75);
+  }
+  .arrow-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(253, 251, 244, 0.4);
+    background: rgba(253, 251, 244, 0.1);
+    color: var(--vt-cream);
+    font-size: 17px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .arrow-btn:hover, .arrow-btn:active {
+    background: var(--vt-cream);
+    color: #1A0F05;
+    transform: scale(1.08);
+  }
+  .inspect-hint {
+    font-size: 9.5px;
+    color: rgba(253, 251, 244, 0.85);
+    letter-spacing: 0.8px;
+    display: block;
+    font-weight: 600;
+  }
+
+  #app-viewport.compact-ui #carousel-ui {
+    bottom: 10px;
+    padding: 8px 12px;
+    border-radius: 18px;
+  }
+  #app-viewport.compact-ui .banner-row {
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  #app-viewport.compact-ui .flavor-banner {
+    padding: 6px 12px;
+    min-width: 175px;
+  }
+  #app-viewport.compact-ui .flavor-banner h2 {
+    font-size: 11.5px;
+    letter-spacing: 0.6px;
+  }
+  #app-viewport.compact-ui .arrow-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+  #app-viewport.compact-ui .inspect-hint {
+    font-size: 7.8px;
+    letter-spacing: 0.4px;
+  }
+
+  /* Panel izquierdo de información y precios (Vidrio Esmerilado Translúcido) */
+  #detail-panel {
+    position: absolute;
+    left: 2.5%;
+    bottom: 22px;
+    width: 350px;
+    z-index: 50;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateZ(0);
+    transition: opacity 0.25s ease;
+    background: var(--vt-glass-bg);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    padding: 18px 20px;
+    border-radius: 22px;
+    border: 1px solid var(--vt-glass-border);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.65), inset 0 1px 2px var(--vt-glass-highlight);
+    will-change: opacity, transform;
+  }
+  #detail-panel.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #detail-tag {
+    font-size: 9.5px;
+    letter-spacing: 2px;
+    color: var(--vt-gold-light);
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  #detail-title {
+    font-size: 19.5px;
+    font-weight: 900;
+    margin: 4px 0 8px;
+    line-height: 1.15;
+    color: var(--vt-cream);
+  }
+  .callout-line {
+    height: 2px;
+    width: 100%;
+    background: linear-gradient(90deg, var(--vt-gold-light), rgba(253, 251, 244, 0.08));
+    margin: 6px 0 12px;
+    position: relative;
+  }
+  .callout-line::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--vt-gold-light);
+    box-shadow: 0 0 10px var(--vt-gold-light);
+  }
+
+  /* Lista de puntos (INFO y PRECIO) */
+  .feature-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-bottom: 13px;
+    padding: 0;
+  }
+  .feature-list li.menu-info-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: rgba(253, 251, 244, 0.07);
+    border: 1px solid rgba(253, 251, 244, 0.18);
+    padding: 8.5px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--vt-cream);
+    letter-spacing: 0.25px;
+    line-height: 1.28;
+    transition: background 0.18s ease, border-color 0.18s ease;
+  }
+  .menu-info-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .feature-list li.menu-info-item.clickable-pair {
+    cursor: pointer;
+  }
+  .feature-list li.menu-info-item.clickable-pair:hover {
+    border-color: rgba(243, 201, 105, 0.5);
+    background: rgba(253, 251, 244, 0.12);
+  }
+  .pair-return-hint {
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--vt-gold-light);
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  .feature-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--vt-gold-light);
+    box-shadow: 0 0 8px var(--vt-gold-light);
+    flex-shrink: 0;
+  }
+
+  /* Botón interactivo exclusivo para "1 boleto por $65" */
+  .single-ticket-btn-item {
+    list-style: none;
+    margin-top: 2px;
+  }
+  .single-ticket-cta-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 13px;
+    border: 1.5px solid #F3C969;
+    background: linear-gradient(135deg, rgba(212, 155, 42, 0.28) 0%, rgba(110, 68, 14, 0.68) 100%);
+    color: var(--vt-cream);
+    font-size: 12.5px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(253, 251, 244, 0.35);
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), padding 0.2s ease, background 0.2s ease;
+    text-align: left;
+  }
+  .single-ticket-cta-btn:hover {
+    transform: translateY(-1px);
+    border-color: #FDFBF4;
+  }
+  .single-ticket-cta-btn.active {
+    padding: 14px 16px;
+    font-size: 14.5px;
+    border-radius: 15px;
+    transform: scale(1.025);
+    background: linear-gradient(135deg, #FDFBF4 0%, #F3C969 55%, #D49B2A 100%);
+    color: #1A0E04;
+    border: 2px solid #FDFBF4;
+    box-shadow: 0 10px 26px rgba(243, 201, 105, 0.5), inset 0 1px 2px #FFFFFF;
+    margin: 4px 0 2px;
+  }
+  .single-btn-left {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .single-btn-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(253, 251, 244, 0.2);
+    border: 1px solid rgba(253, 251, 244, 0.5);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .single-ticket-cta-btn.active .single-btn-icon {
+    width: 25px;
+    height: 25px;
+    font-size: 12.5px;
+    background: #1A0E04;
+    color: #F3C969;
+    border-color: #1A0E04;
+  }
+  .single-btn-badge {
+    font-size: 8.8px;
+    font-weight: 900;
+    letter-spacing: 0.8px;
+    padding: 4px 8px;
+    border-radius: 20px;
+    background: rgba(20, 12, 5, 0.65);
+    color: #F3C969;
+    border: 1px solid rgba(243, 201, 105, 0.45);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .single-ticket-cta-btn.active .single-btn-badge {
+    background: #1A0E04;
+    color: #FDFBF4;
+    border-color: #1A0E04;
+    font-size: 9.2px;
+    padding: 4.5px 9px;
+  }
+
+  /* Contenedor del botón "Agregar al carrito" y su versión con [- cantidad +] */
+  .add-to-cart-row {
+    list-style: none;
+    margin-top: 2px;
+    margin-bottom: 2px;
+  }
+  .add-to-cart-main-btn {
+    width: 100%;
+    padding: 11px 16px;
+    border-radius: 13px;
+    border: 1.5px solid rgba(253, 251, 244, 0.65);
+    background: linear-gradient(135deg, #F3C969 0%, #D49B2A 55%, #9B6714 100%);
+    color: #160B03;
+    font-size: 12.5px;
+    font-weight: 900;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 8px 20px rgba(212, 155, 42, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.65);
+    transition: transform 0.16s ease, filter 0.16s ease;
+  }
+  .add-to-cart-main-btn:hover {
+    transform: translateY(-1.5px);
+    filter: brightness(1.08);
+  }
+  .add-to-cart-main-btn:active {
+    transform: translateY(0) scale(0.98);
+  }
+
+  .inline-cart-stepper {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(22, 12, 4, 0.78);
+    border: 1.5px solid #F3C969;
+    border-radius: 13px;
+    padding: 4px 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(243, 201, 105, 0.3);
+  }
+  .stepper-side-btn {
+    width: 34px;
+    height: 32px;
+    border-radius: 9px;
+    border: 1px solid rgba(253, 251, 244, 0.35);
+    background: linear-gradient(135deg, #FDFBF4 0%, #F3C969 100%);
+    color: #180C03;
+    font-size: 17px;
+    font-weight: 900;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.14s ease;
+    line-height: 1;
+  }
+  .stepper-side-btn:hover {
+    transform: scale(1.06);
+  }
+  .stepper-side-btn:active {
+    transform: scale(0.94);
+  }
+  .stepper-center-qty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 13.5px;
+    font-weight: 900;
+    color: var(--vt-cream);
+    letter-spacing: 0.5px;
+  }
+  .stepper-center-qty span.qty-num {
+    font-size: 15px;
+    color: var(--vt-gold-light);
+    min-width: 18px;
+    text-align: center;
+  }
+
+  .detail-nav-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .detail-nav-row .nav-btn {
+    flex: 1;
+    padding: 7px 6px;
+    font-size: 9.5px;
+    text-align: center;
+  }
+
+  /* Compact UI para panel de detalles en modo móvil */
+  #app-viewport.compact-ui #detail-panel {
+    left: 3%;
+    right: 3%;
+    width: 94%;
+    top: auto;
+    bottom: 10px;
+    padding: 10px 12px;
+    border-radius: 18px;
+  }
+  #app-viewport.compact-ui #detail-tag {
+    font-size: 7.8px;
+    letter-spacing: 1.4px;
+  }
+  #app-viewport.compact-ui #detail-title {
+    font-size: 14px;
+    margin: 2px 0 3px;
+  }
+  #app-viewport.compact-ui .callout-line {
+    margin: 3px 0 6px;
+  }
+  #app-viewport.compact-ui .feature-list {
+    gap: 4px;
+    margin-bottom: 7px;
+  }
+  #app-viewport.compact-ui .feature-list li.menu-info-item {
+    padding: 5px 9px;
+    font-size: 9.8px;
+    border-radius: 8px;
+    line-height: 1.2;
+  }
+  #app-viewport.compact-ui .single-ticket-cta-btn {
+    padding: 7px 11px;
+    font-size: 10.5px;
+    border-radius: 10px;
+  }
+  #app-viewport.compact-ui .single-ticket-cta-btn.active {
+    padding: 9.5px 12px;
+    font-size: 11.8px;
+    border-radius: 11px;
+    transform: scale(1.015);
+  }
+  #app-viewport.compact-ui .single-btn-badge {
+    font-size: 7.5px;
+    padding: 3px 6px;
+  }
+  #app-viewport.compact-ui .add-to-cart-main-btn {
+    padding: 8px 12px;
+    font-size: 10.5px;
+    border-radius: 10px;
+  }
+  #app-viewport.compact-ui .inline-cart-stepper {
+    padding: 3px 5px;
+    border-radius: 10px;
+  }
+  #app-viewport.compact-ui .stepper-side-btn {
+    width: 28px;
+    height: 25px;
+    font-size: 15px;
+    border-radius: 7px;
+  }
+  #app-viewport.compact-ui .stepper-center-qty {
+    font-size: 11.5px;
+  }
+  #app-viewport.compact-ui .stepper-center-qty span.qty-num {
+    font-size: 13px;
+  }
+  #app-viewport.compact-ui .detail-nav-row .nav-btn {
+    padding: 5px 5px;
+    font-size: 8.4px;
+  }
+
+  /* Botones laterales derechos en 2. INFORMACIÓN (INFO y PRECIO) */
+  #side-controls {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%) translateZ(0);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    z-index: 52;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  #side-controls.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .step-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 1.5px solid var(--vt-glass-border);
+    background: var(--vt-glass-bg);
+    color: var(--vt-cream);
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.55), inset 0 1px 1px var(--vt-glass-highlight);
+  }
+  .step-btn.active, .step-btn:hover {
+    background: linear-gradient(135deg, #FDFBF4 0%, #F3C969 100%);
+    color: #1A0F05;
+    border-color: #FDFBF4;
+    transform: scale(1.1);
+    box-shadow: 0 0 20px rgba(243, 201, 105, 0.6);
+  }
+
+  #app-viewport.compact-ui #side-controls {
+    right: 10px;
+    top: 34%;
+    gap: 10px;
+  }
+  #app-viewport.compact-ui .step-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 8.5px;
+  }
+
+  /* ============================================================================
+     APARTADO DE CARRITO (OPTIMIZADO A 120 FPS CON COMPOSICIÓN GPU)
+     ============================================================================ */
+  #cart-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 80;
+    background: rgba(10, 5, 2, 0.58);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    opacity: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    will-change: opacity;
+    transform: translateZ(0);
+  }
+  #cart-backdrop.open {
+    pointer-events: auto;
+  }
+
+  #cart-modal {
+    position: relative;
+    width: 390px;
+    max-width: 92%;
+    height: 530px;
+    max-height: 85%;
+    border-radius: 26px;
+    background: rgba(36, 22, 10, 0.56);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1.5px solid rgba(253, 251, 244, 0.3);
+    box-shadow: 0 25px 65px rgba(0, 0, 0, 0.8), inset 0 1px 2px rgba(243, 201, 105, 0.35);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform-origin: center center;
+    will-change: transform, opacity;
+  }
+
+  .cart-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px 18px 13px;
+    border-bottom: 1px solid rgba(253, 251, 244, 0.16);
+    flex-shrink: 0;
+  }
+  .cart-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(253, 251, 244, 0.1);
+    border: 1px solid rgba(253, 251, 244, 0.28);
+    color: var(--vt-cream);
+    padding: 7px 13px;
+    border-radius: 18px;
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease;
+  }
+  .cart-back-btn:hover {
+    background: linear-gradient(135deg, #FDFBF4 0%, #F3C969 100%);
+    color: #1A0E04;
+    border-color: #FDFBF4;
+    transform: translateX(-2px);
+  }
+  .cart-header-title {
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: var(--vt-gold-light);
+    text-transform: uppercase;
+  }
+
+  .cart-modal-body {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 14px 16px;
+    overflow: hidden;
+  }
+
+  #cart-empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 14px;
+    padding: 20px;
+  }
+  .empty-ticket-illust {
+    width: 74px;
+    height: 46px;
+    opacity: 0.78;
+    filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+  }
+  .cart-empty-text {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--vt-cream);
+    letter-spacing: 0.5px;
+    opacity: 0.92;
+  }
+  .cart-empty-add-btn {
+    padding: 10px 26px;
+    border-radius: 22px;
+    border: 1.5px solid #FDFBF4;
+    background: linear-gradient(135deg, #FDFBF4 0%, #F3C969 55%, #D49B2A 100%);
+    color: #1A0E04;
+    font-size: 12.5px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 8px 22px rgba(212, 155, 42, 0.45);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .cart-empty-add-btn:hover {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 10px 26px rgba(243, 201, 105, 0.65);
+  }
+
+  #cart-items-list {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: hidden;
+    padding-right: 2px;
+    scroll-behavior: smooth;
+  }
+  #cart-items-list.scrollable {
+    overflow-y: auto;
+    padding-right: 5px;
+  }
+  #cart-items-list::-webkit-scrollbar {
+    width: 5px;
+  }
+  #cart-items-list::-webkit-scrollbar-track {
+    background: rgba(253, 251, 244, 0.05);
+    border-radius: 10px;
+  }
+  #cart-items-list::-webkit-scrollbar-thumb {
+    background: rgba(243, 201, 105, 0.45);
+    border-radius: 10px;
+  }
+
+  .cart-item-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 11px;
+    border-radius: 15px;
+    background: rgba(253, 251, 244, 0.08);
+    border: 1px solid rgba(253, 251, 244, 0.2);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.32);
+    flex-shrink: 0;
+    transform-origin: center center;
+    overflow: hidden;
+    will-change: transform, opacity;
+  }
+  .cart-item-thumb {
+    width: 54px;
+    height: 36px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cart-item-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .cart-item-name {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--vt-cream);
+    line-height: 1.2;
+    word-break: break-word;
+  }
+  .cart-item-meta {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--vt-gold-light);
+    letter-spacing: 0.3px;
+  }
+  .cart-item-controls {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+  .cart-ctrl-btn {
+    width: 27px;
+    height: 27px;
+    border-radius: 8px;
+    border: 1px solid rgba(253, 251, 244, 0.3);
+    background: rgba(253, 251, 244, 0.12);
+    color: var(--vt-cream);
+    font-size: 14px;
+    font-weight: 900;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+  }
+  .cart-ctrl-btn:hover {
+    background: var(--vt-cream);
+    color: #1A0E04;
+    border-color: var(--vt-cream);
+    transform: scale(1.07);
+  }
+  .cart-ctrl-btn.delete-btn {
+    background: rgba(185, 28, 28, 0.25);
+    border-color: rgba(248, 113, 113, 0.45);
+    color: #FCA5A5;
+  }
+  .cart-ctrl-btn.delete-btn:hover {
+    background: #DC2626;
+    color: #FFFFFF;
+    border-color: #FCA5A5;
+  }
+  .cart-ctrl-btn svg {
+    width: 13px;
+    height: 13px;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    fill: none;
+  }
+
+  .cart-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 16px 15px;
+    border-top: 1px solid rgba(253, 251, 244, 0.18);
+    background: rgba(18, 10, 4, 0.45);
+    flex-shrink: 0;
+  }
+  .send-whatsapp-btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-radius: 15px;
+    border: 1.5px solid #FDFBF4;
+    background: linear-gradient(135deg, #FDFBF4 0%, #F3C969 52%, #D49B2A 100%);
+    color: #1A0E04;
+    font-size: 12.5px;
+    font-weight: 900;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 8px 22px rgba(212, 155, 42, 0.42);
+    transition: transform 0.18s ease, filter 0.18s ease;
+    white-space: nowrap;
+  }
+  .send-whatsapp-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    filter: brightness(1.06);
+  }
+  .send-whatsapp-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    border-color: rgba(253, 251, 244, 0.25);
+    box-shadow: none;
+  }
+  .send-whatsapp-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+    flex-shrink: 0;
+  }
+
+  .cart-total-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 6px 12px;
+    border-radius: 13px;
+    background: rgba(253, 251, 244, 0.08);
+    border: 1px solid rgba(243, 201, 105, 0.4);
+    min-width: 102px;
+    flex-shrink: 0;
+  }
+  .cart-total-label {
+    font-size: 8.5px;
+    font-weight: 800;
+    letter-spacing: 1.4px;
+    color: rgba(253, 251, 244, 0.72);
+    text-transform: uppercase;
+  }
+  .cart-total-amount {
+    font-size: 17px;
+    font-weight: 900;
+    color: var(--vt-gold-light);
+    letter-spacing: 0.5px;
+    line-height: 1.1;
+  }
+
+  /* Ajustes del Carrito para Modo Celular 9:16 */
+  #app-viewport.compact-ui #cart-modal {
+    width: 90%;
+    max-width: 332px;
+    height: 465px;
+    max-height: 82%;
+    border-radius: 22px;
+  }
+  #app-viewport.compact-ui .cart-modal-header {
+    padding: 12px 14px 10px;
+  }
+  #app-viewport.compact-ui .cart-back-btn {
+    padding: 5.5px 10px;
+    font-size: 10.5px;
+  }
+  #app-viewport.compact-ui .cart-header-title {
+    font-size: 11.5px;
+    letter-spacing: 1.5px;
+  }
+  #app-viewport.compact-ui .cart-modal-body {
+    padding: 10px 12px;
+  }
+  #app-viewport.compact-ui .cart-item-card {
+    padding: 8px 9px;
+    gap: 8px;
+    border-radius: 12px;
+  }
+  #app-viewport.compact-ui .cart-item-thumb {
+    width: 44px;
+    height: 30px;
+  }
+  #app-viewport.compact-ui .cart-item-name {
+    font-size: 10.8px;
+  }
+  #app-viewport.compact-ui .cart-item-meta {
+    font-size: 9.5px;
+  }
+  #app-viewport.compact-ui .cart-ctrl-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 13px;
+    border-radius: 7px;
+  }
+  #app-viewport.compact-ui .cart-modal-footer {
+    padding: 10px 12px 12px;
+    gap: 8px;
+  }
+  #app-viewport.compact-ui .send-whatsapp-btn {
+    padding: 10px 12px;
+    font-size: 11px;
+    border-radius: 12px;
+  }
+  #app-viewport.compact-ui .cart-total-box {
+    min-width: 88px;
+    padding: 5px 10px;
+  }
+  #app-viewport.compact-ui .cart-total-amount {
+    font-size: 14.5px;
+  }
+
+  /* Miniatura 2D voladora acelerada por GPU */
+  .flying-ticket-token {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 58px;
+    height: 36px;
+    z-index: 95;
+    pointer-events: none;
+    will-change: transform;
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.55));
+  }
+</style>
+</head>
+<body>
+  <div id="app-viewport">
+    <div id="bg-radial-glow"></div>
+    <div id="loader-badge">CATÁLOGO 3D VANTICK LISTO</div>
+
+    <header>
+      <!-- Logotipo VANTICK alineado dentro del cuerpo principal de la silueta del boleto -->
+      <div class="ticket-logo-badge" title="VANTICK - Tu dinero vale más">
+        <svg class="ticket-logo-svg" viewBox="0 0 268 76" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="vtTicketGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#2A180A" stop-opacity="0.95"/>
+              <stop offset="55%" stop-color="#4A2C12" stop-opacity="0.90"/>
+              <stop offset="100%" stop-color="#1A0E05" stop-opacity="0.96"/>
+            </linearGradient>
+            <linearGradient id="vtGoldStroke" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#FDFBF4"/>
+              <stop offset="50%" stop-color="#F3C969"/>
+              <stop offset="100%" stop-color="#C88A1E"/>
+            </linearGradient>
+          </defs>
+          <path d="M 14,4 H 49 A 7,7 0 0 0 63,4 H 254 A 10,10 0 0 1 264,14 V 25 A 13,13 0 0 0 264,51 V 62 A 10,10 0 0 1 254,72 H 63 A 7,7 0 0 0 49,72 H 14 A 10,10 0 0 1 4,62 V 51 A 13,13 0 0 0 4,25 V 14 A 10,10 0 0 1 14,4 Z"
+                fill="url(#vtTicketGrad)" stroke="url(#vtGoldStroke)" stroke-width="2.2"/>
+          <line x1="56" y1="13" x2="56" y2="63" stroke="#F3C969" stroke-width="1.6" stroke-dasharray="4 4" opacity="0.72"/>
+          <g fill="#FDFBF4" opacity="0.62">
+            <rect x="21" y="16" width="23" height="2.8" rx="0.5"/>
+            <rect x="21" y="21.5" width="23" height="1.6" rx="0.5"/>
+            <rect x="21" y="25.5" width="23" height="3.8" rx="0.5"/>
+            <rect x="21" y="32" width="23" height="1.8" rx="0.5"/>
+            <rect x="21" y="36.5" width="23" height="3.2" rx="0.5"/>
+            <rect x="21" y="42" width="23" height="1.6" rx="0.5"/>
+            <rect x="21" y="46.5" width="23" height="3.5" rx="0.5"/>
+            <rect x="21" y="52.5" width="23" height="2.2" rx="0.5"/>
+            <rect x="21" y="57" width="23" height="2.5" rx="0.5"/>
+          </g>
+        </svg>
+        <div class="ticket-logo-content">
+          <div class="ticket-logo-title">VANTICK</div>
+          <span class="ticket-logo-sub" id="brand-sub">CINE &amp; EXPERIENCIAS</span>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <button class="nav-btn active" data-mode="carousel" onclick="setMode('carousel')">1. CARRUSEL</button>
+        <button class="nav-btn" data-mode="detail" onclick="setMode('detail')">2. INFORMACIÓN</button>
+        <button class="cart-header-btn" id="header-cart-btn" title="Ver Carrito de Compras" onclick="toggleCartModal()">
+          <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="21" r="1.6"></circle>
+            <circle cx="20" cy="21" r="1.6"></circle>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+          </svg>
+          <span class="cart-badge-count" id="cart-badge-count">0</span>
+        </button>
+        <button class="nav-btn" data-mode="lineup" onclick="setMode('lineup')">3. COLECCIÓN</button>
+        <button class="format-btn" id="format-toggle-btn" onclick="toggleScreenFormat()">📱 MODO CELULAR 9:16</button>
+      </div>
+    </header>
+
+    <div id="bg-giant-text">VANTICK</div>
+    <div id="canvas-container"></div>
+
+    <!-- Nombres de cada artículo y cápsula divisoria "Combos" (Exclusivo de 3. COLECCIÓN) -->
+    <div id="lineup-labels-container"></div>
+
+    <!-- Barra lateral de scroll vertical en 3. COLECCIÓN -->
+    <div id="lineup-scroll-ui">
+      <button type="button" class="scroll-step-btn" title="Subir a Boletos" onclick="scrollCollectionBy(-2.6)">&#8593;</button>
+      <div class="scroll-track">
+        <div class="scroll-thumb" id="lineup-scroll-thumb"></div>
+      </div>
+      <button type="button" class="scroll-step-btn" title="Bajar a Combos" onclick="scrollCollectionBy(2.6)">&#8595;</button>
+    </div>
+
+    <!-- Botón lateral en forma de cápsula "Combos" en el modo 1. CARRUSEL -->
+    <div id="carousel-side-switch">
+      <button type="button" class="capsule-switch-btn" id="carousel-combos-btn" title="Cambiar entre Boletos y Combos" onclick="toggleCarouselCategory()">
+        <span id="carousel-combos-label">Combos</span>
+      </button>
+    </div>
+
+    <!-- Barra inferior del carrusel (Visible en 1. CARRUSEL) -->
+    <div id="carousel-ui">
+      <div class="banner-row">
+        <button class="arrow-btn" title="Anterior" onclick="changeItem(-1)">&#8592;</button>
+        <div class="flavor-banner" id="flavor-banner" onclick="setMode('detail')">
+          <h2 id="flavor-name">Boletos a sala 2D</h2>
+        </div>
+        <button class="arrow-btn" title="Siguiente" onclick="changeItem(1)">&#8594;</button>
+      </div>
+      <span class="inspect-hint" id="inspect-hint">TOCA LAS FLECHAS PARA CAMBIAR O EL MODELO 3D PARA VER SU INFORMACIÓN</span>
+    </div>
+
+    <!-- Panel izquierdo de detalles e interacción en vidrio esmerilado -->
+    <div id="detail-panel">
+      <div id="detail-tag">INFORMACIÓN OFICIAL</div>
+      <h1 id="detail-title">Boletos a sala 2D</h1>
+      <div class="callout-line" id="callout-line"></div>
+
+      <ul class="feature-list" id="detail-list"></ul>
+
+      <div class="detail-nav-row">
+        <button class="nav-btn" onclick="changeItem(-1)">&#8592; ANTERIOR</button>
+        <button class="nav-btn" onclick="setMode('carousel')">CARRUSEL</button>
+        <button class="nav-btn" onclick="changeItem(1)">SIGUIENTE &#8594;</button>
+      </div>
+    </div>
+
+    <!-- Botones laterales de 2. INFORMACIÓN (INFO y PRECIO) -->
+    <div id="side-controls">
+      <button class="step-btn active" title="Información del Producto" onclick="inspectStep(0)">INFO</button>
+      <button class="step-btn" title="Precios Oficiales" onclick="inspectStep(1)">PRECIO</button>
+    </div>
+
+    <!-- Apartado de Carrito (Rectángulo vertical centrado con vidrio esmerilado y desenfoque de fondo) -->
+    <div id="cart-backdrop" onclick="handleBackdropClick(event)">
+      <div id="cart-modal" onclick="event.stopPropagation()">
+        <div class="cart-modal-header">
+          <button type="button" class="cart-back-btn" onclick="closeCartModal()">&#8592; Atrás</button>
+          <span class="cart-header-title">MI CARRITO</span>
+        </div>
+
+        <div class="cart-modal-body">
+          <div id="cart-empty-state">
+            <svg class="empty-ticket-illust" viewBox="0 0 120 72">
+              <path d="M 10,6 H 34 A 6,6 0 0 0 46,6 H 110 A 6,6 0 0 1 116,12 V 24 A 10,10 0 0 0 116,48 V 60 A 6,6 0 0 1 110,66 H 46 A 6,6 0 0 0 34,66 H 10 A 6,6 0 0 1 4,60 V 48 A 10,10 0 0 0 4,24 V 12 A 6,6 0 0 1 10,6 Z"
+                    fill="rgba(74,44,18,0.55)" stroke="#F3C969" stroke-width="2.5"/>
+              <line x1="40" y1="14" x2="40" y2="58" stroke="#F3C969" stroke-width="2" stroke-dasharray="4 4"/>
+              <text x="78" y="41" fill="#FDFBF4" font-size="14" font-weight="900" text-anchor="middle" letter-spacing="1.5">VANTICK</text>
+            </svg>
+            <div class="cart-empty-text">No hay artículos agregados</div>
+            <button type="button" class="cart-empty-add-btn" onclick="goToCollectionFromEmptyCart()">Agregar</button>
+          </div>
+
+          <div id="cart-items-list"></div>
+        </div>
+
+        <div class="cart-modal-footer">
+          <button type="button" class="send-whatsapp-btn" id="send-whatsapp-btn" onclick="sendCartToWhatsApp()" disabled>
+            <svg viewBox="0 0 24 24">
+              <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.127.558 4.198 1.617 6.031l-1.617 5.969 6.135-1.608c1.787.989 3.806 1.512 5.865 1.512 6.627 0 12-5.373 12-12s-5.373-11.904-12-11.904z"/>
+            </svg>
+            <span>Enviar carrito</span>
+          </button>
+
+          <div class="cart-total-box">
+            <span class="cart-total-label">TOTAL</span>
+            <span class="cart-total-amount" id="cart-total-amount">$0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// Desbloqueo de límite de cuadros en GSAP para pantallas de 120Hz / 144Hz
+gsap.ticker.fps(-1);
+gsap.ticker.lagSmoothing(0);
+
+const TICKET_INFO_BULLETS = [
+  "Disponibles para todo México",
+  "Entrega rápida",
+  "Duración de 30 días desde que son entregados",
+  "Disponibles para películas en preventa"
+];
+
+const COMBO_COMMON_BULLETS = [
+  "Canjeables únicamente de forma presencial",
+  "Se entrega un código QR",
+  "Se pueden realizar modificaciones al combo por un costo extra en taquilla"
+];
+
+const TICKETS = [
+  {
+    name: "Boletos a sala 2D",
+    shortBadge: "SALA TRADICIONAL 2D",
+    code: "VT-2D-001",
+    primaryBrown: "#36200D",
+    secondaryBrown: "#1C0F05",
+    stubColor: "#FDFBF4",
+    stubText: "#261507",
+    foilGold: "#E5B24C",
+    bannerBg: "linear-gradient(135deg, rgba(62, 36, 14, 0.88), rgba(28, 15, 5, 0.94))",
+    bgRadial: "#472A12",
+    accent: "#E5B24C",
+    prices: [
+      "2 boletos por $125",
+      "1 boleto por $65"
+    ],
+    skus: [
+      { id: "vt_2d_pair", name: "Boletos a sala 2D (2 boletos)", packDesc: "2 boletos por $125", unitPrice: 125, isSingle: false },
+      { id: "vt_2d_single", name: "Boletos a sala 2D (1 boleto)", packDesc: "1 boleto por $65", unitPrice: 65, isSingle: true }
+    ]
+  },
+  {
+    name: "Boletos a sala VIP 2D",
+    shortBadge: "EXPERIENCIA SALA VIP 2D",
+    code: "VT-VIP-002",
+    primaryBrown: "#5C3A16",
+    secondaryBrown: "#2D1A08",
+    stubColor: "#FDFBF4",
+    stubText: "#36200A",
+    foilGold: "#F7CF75",
+    bannerBg: "linear-gradient(135deg, rgba(96, 60, 22, 0.88), rgba(45, 26, 8, 0.94))",
+    bgRadial: "#694218",
+    accent: "#F7CF75",
+    prices: [
+      "2 boletos por $280"
+    ],
+    skus: [
+      { id: "vt_vip_pair", name: "Boletos a sala VIP 2D (2 boletos)", packDesc: "2 boletos por $280", unitPrice: 280, isSingle: false }
+    ]
+  },
+  {
+    name: "Boletos a sala 3D/PLUUS",
+    shortBadge: "SALA 3D / PLUUS",
+    code: "VT-3DP-003",
+    primaryBrown: "#754A1F",
+    secondaryBrown: "#42270E",
+    stubColor: "#FDFBF4",
+    stubText: "#42270E",
+    foilGold: "#F0C15A",
+    bannerBg: "linear-gradient(135deg, rgba(118, 74, 31, 0.88), rgba(62, 37, 13, 0.94))",
+    bgRadial: "#7D4F22",
+    accent: "#F0C15A",
+    prices: [
+      "2 boletos por $190"
+    ],
+    skus: [
+      { id: "vt_3d_pair", name: "Boletos a sala 3D/PLUUS (2 boletos)", packDesc: "2 boletos por $190", unitPrice: 190, isSingle: false }
+    ]
+  },
+  {
+    name: "Boletos a sala 4DX/Macro XE/IMAX",
+    shortBadge: "4DX • MACRO XE • IMAX",
+    code: "VT-MAX-004",
+    primaryBrown: "#4A2410",
+    secondaryBrown: "#241006",
+    stubColor: "#FDFBF4",
+    stubText: "#2E1508",
+    foilGold: "#E8A838",
+    bannerBg: "linear-gradient(135deg, rgba(82, 39, 17, 0.88), rgba(38, 16, 6, 0.94))",
+    bgRadial: "#5E2E14",
+    accent: "#E8A838",
+    prices: [
+      "2 boletos por $225"
+    ],
+    skus: [
+      { id: "vt_4dx_pair", name: "Boletos a sala 4DX/Macro XE/IMAX (2 boletos)", packDesc: "2 boletos por $225", unitPrice: 225, isSingle: false }
+    ]
+  }
+];
+
+const COMBOS = [
+  {
+    name: "Combo jumbo tradicional",
+    comboType: "jumbo_trad",
+    isVIP: false,
+    contentDesc: "Contiene palomitas mix (2 sabores) y un refresco jumbo",
+    primaryBrown: "#4E2C11",
+    secondaryBrown: "#241205",
+    foilGold: "#F3C969",
+    bannerBg: "linear-gradient(135deg, rgba(84, 48, 18, 0.9), rgba(36, 18, 6, 0.95))",
+    bgRadial: "#5C3414",
+    accent: "#F3C969",
+    prices: ["Combo por $195"],
+    skus: [
+      { id: "vt_combo_jumbo_trad", name: "Combo jumbo tradicional", packDesc: "Palomitas mix + Refresco jumbo", unitPrice: 195, isSingle: true }
+    ]
+  },
+  {
+    name: "Combo hotdog tradicional",
+    comboType: "hotdog_trad",
+    isVIP: false,
+    contentDesc: "Contiene un hotdog grande, unas palomitas grandes y un refresco grande",
+    primaryBrown: "#633212",
+    secondaryBrown: "#2B1406",
+    foilGold: "#F59E0B",
+    bannerBg: "linear-gradient(135deg, rgba(102, 52, 18, 0.9), rgba(43, 20, 6, 0.95))",
+    bgRadial: "#6E3814",
+    accent: "#FBBF24",
+    prices: ["Combo por $215"],
+    skus: [
+      { id: "vt_combo_hotdog_trad", name: "Combo hotdog tradicional", packDesc: "Hotdog gde + Palomitas gdes + Refresco gde", unitPrice: 215, isSingle: true }
+    ]
+  },
+  {
+    name: "Combo nachos grande",
+    comboType: "nachos_gde",
+    isVIP: false,
+    contentDesc: "Contiene unos nachos grandes, palomitas grandes y un refresco grande",
+    primaryBrown: "#703B10",
+    secondaryBrown: "#331905",
+    foilGold: "#FBBF24",
+    bannerBg: "linear-gradient(135deg, rgba(115, 62, 18, 0.9), rgba(48, 24, 6, 0.95))",
+    bgRadial: "#7A4212",
+    accent: "#FCD34D",
+    prices: ["Combo por $230"],
+    skus: [
+      { id: "vt_combo_nachos_gde", name: "Combo nachos grande", packDesc: "Nachos gdes + Palomitas gdes + Refresco gde", unitPrice: 230, isSingle: true }
+    ]
+  },
+  {
+    name: "Combo ICE",
+    comboType: "ice_gde",
+    isVIP: false,
+    contentDesc: "Contiene un ICE grande y palomitas grandes",
+    primaryBrown: "#3D291A",
+    secondaryBrown: "#1B110A",
+    foilGold: "#60A5FA",
+    bannerBg: "linear-gradient(135deg, rgba(58, 42, 30, 0.9), rgba(24, 16, 12, 0.95))",
+    bgRadial: "#4A3322",
+    accent: "#93C5FD",
+    prices: ["Combo por $170"],
+    skus: [
+      { id: "vt_combo_ice", name: "Combo ICE", packDesc: "ICE grande + Palomitas grandes", unitPrice: 170, isSingle: true }
+    ]
+  },
+  {
+    name: "Combo jumbo VIP",
+    comboType: "jumbo_vip",
+    isVIP: true,
+    contentDesc: "Contiene palomitas grandes y refresco grande",
+    primaryBrown: "#261B10",
+    secondaryBrown: "#100B06",
+    foilGold: "#F7CF75",
+    bannerBg: "linear-gradient(135deg, rgba(48, 34, 18, 0.92), rgba(18, 12, 6, 0.96))",
+    bgRadial: "#4F3818",
+    accent: "#F7CF75",
+    prices: ["Combo por $185"],
+    skus: [
+      { id: "vt_combo_jumbo_vip", name: "Combo jumbo VIP", packDesc: "Palomitas gdes + Refresco gde (VIP)", unitPrice: 185, isSingle: true }
+    ]
+  },
+  {
+    name: "Combo bagui VIP",
+    comboType: "bagui_vip",
+    isVIP: true,
+    contentDesc: "Contiene un bagui clásico con papas, palomitas grandes y refresco grande",
+    primaryBrown: "#332211",
+    secondaryBrown: "#140C05",
+    foilGold: "#F5C451",
+    bannerBg: "linear-gradient(135deg, rgba(64, 42, 18, 0.92), rgba(22, 13, 5, 0.96))",
+    bgRadial: "#5E3E16",
+    accent: "#F5C451",
+    prices: ["Combo por $325"],
+    skus: [
+      { id: "vt_combo_bagui_vip", name: "Combo bagui VIP", packDesc: "Bagui con papas + Palomitas + Refresco (VIP)", unitPrice: 325, isSingle: true }
+    ]
+  }
+];
+
+const SKU_CATALOG = {};
+TICKETS.forEach((t, tIdx) => {
+  t.skus.forEach(s => {
+    SKU_CATALOG[s.id] = {
+      ...s,
+      category: 'tickets',
+      itemIndex: tIdx,
+      primaryBrown: t.primaryBrown,
+      secondaryBrown: t.secondaryBrown,
+      foilGold: t.foilGold
+    };
+  });
+});
+COMBOS.forEach((c, cIdx) => {
+  c.skus.forEach(s => {
+    SKU_CATALOG[s.id] = {
+      ...s,
+      category: 'combos',
+      itemIndex: cIdx,
+      comboType: c.comboType,
+      primaryBrown: c.primaryBrown,
+      secondaryBrown: c.secondaryBrown,
+      foilGold: c.foilGold
+    };
+  });
+});
+
+let activeCategory = 'tickets'; // 'tickets' | 'combos'
+let currentIndex = 0;
+let currentMode = 'carousel'; // 'carousel' | 'detail' | 'lineup'
+let currentStep = 0; // 0 = INFO, 1 = PRECIO
+let isSingleTicket2D = false;
+let isCartOpen = false;
+
+// Variables de desplazamiento vertical suave para 3. COLECCIÓN
+let collectionScrollY = 0;
+let collectionTargetScrollY = 0;
+let maxCollectionScrollY = 3.6;
+
+const cartState = {};
+const moneyCounterAnim = { val: 0 };
+
+const viewport = document.getElementById('app-viewport');
+const container = document.getElementById('canvas-container');
+const bgRadialGlow = document.getElementById('bg-radial-glow');
+const lineupLabelsContainer = document.getElementById('lineup-labels-container');
+
+let cachedVpWidth = window.innerWidth || 360;
+let cachedVpHeight = window.innerHeight || 640;
+
+function getSafeWindowSize() {
+  const vw = Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0, 360);
+  const vh = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0, 640);
+  return { vw, vh };
+}
+
+let isMobileFormat = getSafeWindowSize().vw < getSafeWindowSize().vh;
+
+function isCompactView() {
+  const { vw, vh } = getSafeWindowSize();
+  return isMobileFormat || (vw < vh);
+}
+
+function applyViewportDimensions() {
+  const { vw, vh } = getSafeWindowSize();
+  const nativePortrait = vw < vh;
+
+  if (!isMobileFormat) {
+    viewport.style.width = vw + 'px';
+    viewport.style.height = vh + 'px';
+    viewport.classList.remove('mobile-frame');
+    cachedVpWidth = vw;
+    cachedVpHeight = vh;
+  } else {
+    if (nativePortrait) {
+      viewport.style.width = vw + 'px';
+      viewport.style.height = vh + 'px';
+      viewport.classList.remove('mobile-frame');
+      cachedVpWidth = vw;
+      cachedVpHeight = vh;
+    } else {
+      const availH = Math.max(vh - 12, 320);
+      const availW = Math.max(vw - 12, 240);
+      let targetW = availH * (9 / 16);
+      let targetH = availH;
+      if (targetW > availW) {
+        targetW = availW;
+        targetH = Math.min(availH, targetW * (16 / 9));
+      }
+      cachedVpWidth = Math.floor(targetW);
+      cachedVpHeight = Math.floor(targetH);
+      viewport.style.width = cachedVpWidth + 'px';
+      viewport.style.height = cachedVpHeight + 'px';
+      viewport.classList.add('mobile-frame');
+    }
+  }
+
+  const compact = isCompactView();
+  viewport.classList.toggle('compact-ui', compact);
+  maxCollectionScrollY = compact ? 5.25 : 3.55;
+  collectionTargetScrollY = Math.min(collectionTargetScrollY, maxCollectionScrollY);
+
+  const btn = document.getElementById('format-toggle-btn');
+  if (btn) {
+    btn.textContent = isMobileFormat ? "💻 MODO HORIZONTAL" : "📱 MODO CELULAR 9:16";
+  }
+
+  if (isCartOpen) {
+    requestAnimationFrame(updateCartScrollLock);
+  }
+}
+
+applyViewportDimensions();
+
+const initW = Math.max(cachedVpWidth, 320);
+const initH = Math.max(cachedVpHeight, 480);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(36, initW / initH, 0.1, 100);
+const cameraBaseY = 0.15;
+camera.position.set(0, cameraBaseY, 11.2);
+const cameraTarget = new THREE.Vector3(0, 0.05, 1.5);
+
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  alpha: true,
+  powerPreference: "high-performance",
+  stencil: false
+});
+renderer.setSize(initW, initH);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.06;
+container.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xFFF6E5, 0.72));
+
+const keyLight = new THREE.DirectionalLight(0xFFFDF8, 1.08);
+keyLight.position.set(4, 6.5, 6.5);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0xF3C969, 0.54);
+fillLight.position.set(-4.5, 2.5, 4.5);
+scene.add(fillLight);
+
+const rimLight = new THREE.PointLight(0xE5B24C, 1.15, 18);
+rimLight.position.set(0, 2.2, -3.2);
+scene.add(rimLight);
+
+const pedestalGroup = new THREE.Group();
+const baseMesh = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.18, 1.34, 0.09, 36),
+  new THREE.MeshStandardMaterial({ color: 0x1A0F06, metalness: 0.55, roughness: 0.45 })
+);
+const ringMat = new THREE.MeshBasicMaterial({ color: 0xE5B24C, transparent: true, opacity: 0.65 });
+const ringMesh = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.016, 12, 48), ringMat);
+ringMesh.rotation.x = Math.PI / 2;
+ringMesh.position.y = 0.046;
+pedestalGroup.add(baseMesh, ringMesh);
+pedestalGroup.position.set(0, -1.28, 2.6);
+scene.add(pedestalGroup);
+
+function drawSparkleStar(ctx, cx, cy, outerR, innerR, color) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = (i * Math.PI) / 4;
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawFilmStripBand(ctx, x, y, width, height, color) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, width, height);
+  const holeW = 14;
+  const holeH = 7;
+  const step = 24;
+  for (let hx = x + 8; hx < x + width - holeW; hx += step) {
+    ctx.fillRect(hx, y + 3, holeW, holeH);
+    ctx.fillRect(hx, y + height - holeH - 3, holeW, holeH);
+  }
+  ctx.restore();
+}
+
+/* ============================================================================
+   MODELADO 3D DE LOS 4 BOLETOS DE CINE VANTICK
+   ============================================================================ */
+function createTicketFrontTexture(ticketData, variantIdx) {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.scale(0.5, 0.5);
+
+  const W = 2048;
+  const H = 1024;
+  const stubX = Math.floor(W * 0.28);
+
+  const stubGrad = ctx.createLinearGradient(0, 0, stubX, H);
+  stubGrad.addColorStop(0, "#FDFBF4");
+  stubGrad.addColorStop(1, "#F2E8CF");
+  ctx.fillStyle = stubGrad;
+  ctx.fillRect(0, 0, stubX, H);
+
+  const mainGrad = ctx.createLinearGradient(stubX, 0, W, H);
+  mainGrad.addColorStop(0, ticketData.primaryBrown);
+  mainGrad.addColorStop(0.55, ticketData.secondaryBrown);
+  mainGrad.addColorStop(1, "#120903");
+  ctx.fillStyle = mainGrad;
+  ctx.fillRect(stubX, 0, W - stubX, H);
+
+  const glowGrad = ctx.createRadialGradient(stubX + (W - stubX) * 0.52, H * 0.48, 40, stubX + (W - stubX) * 0.52, H * 0.48, 680);
+  glowGrad.addColorStop(0, "rgba(243, 201, 105, 0.22)");
+  glowGrad.addColorStop(1, "rgba(243, 201, 105, 0)");
+  ctx.fillStyle = glowGrad;
+  ctx.fillRect(stubX, 0, W - stubX, H);
+
+  ctx.save();
+  ctx.globalAlpha = 0.14;
+  drawFilmStripBand(ctx, stubX + 40, H - 125, W - stubX - 90, 62, ticketData.foilGold);
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = ticketData.foilGold;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(stubX + 38, 42, W - stubX - 82, H - 84);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(stubX + 52, 56, W - stubX - 110, H - 112);
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = ticketData.foilGold;
+  ctx.lineWidth = 7;
+  ctx.setLineDash([22, 18]);
+  ctx.beginPath();
+  ctx.moveTo(stubX, 50);
+  ctx.lineTo(stubX, H - 50);
+  ctx.stroke();
+  ctx.restore();
+
+  const barX = 115;
+  const barY = 135;
+  const barW = 290;
+  const barH = H - 270;
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(140, 94, 20, 0.45)";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(barX - 22, barY - 22, barW + 44, barH + 44);
+
+  const pattern = [14, 6, 8, 12, 22, 8, 6, 14, 18, 10, 6, 20, 8, 12, 16, 6, 10, 22, 8, 14, 6, 12, 18, 8, 10, 6, 16, 12, 8, 20, 6, 14];
+  let currY = barY + 12;
+  ctx.fillStyle = ticketData.stubText;
+  for (let i = 0; i < pattern.length; i++) {
+    const h = pattern[i];
+    if (currY + h > barY + barH - 12) break;
+    if (i % 2 === 0) {
+      ctx.fillRect(barX, currY, barW, h);
+    }
+    currY += h + 7;
+  }
+
+  ctx.translate(barX + barW + 65, H / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = ticketData.stubText;
+  ctx.font = '900 34px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${ticketData.code}-${variantIdx}`, 0, 0);
+  ctx.font = '700 22px "Segoe UI", sans-serif';
+  ctx.fillStyle = "#8C5E14";
+  ctx.fillText("VANTICK PASS", 0, 34);
+  ctx.restore();
+
+  const centerX = stubX + (W - stubX) * 0.5;
+
+  drawSparkleStar(ctx, stubX + 145, 155, 42, 10, ticketData.foilGold);
+  drawSparkleStar(ctx, stubX + 200, 120, 20, 5, "#FDFBF4");
+  drawSparkleStar(ctx, W - 155, 165, 40, 10, ticketData.foilGold);
+  drawSparkleStar(ctx, W - 115, 220, 18, 4, "#FDFBF4");
+  drawSparkleStar(ctx, W - 165, H - 165, 34, 8, ticketData.foilGold);
+
+  ctx.save();
+  ctx.fillStyle = ticketData.foilGold;
+  ctx.font = '800 32px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.letterSpacing = "6px";
+  ctx.fillText("★ PASE OFICIAL DE CINE ★", centerX, 155);
+
+  const titleGrad = ctx.createLinearGradient(centerX - 380, 240, centerX + 380, 440);
+  titleGrad.addColorStop(0, "#FDFBF4");
+  titleGrad.addColorStop(0.5, ticketData.foilGold);
+  titleGrad.addColorStop(1, "#C88A1E");
+  ctx.fillStyle = titleGrad;
+  ctx.shadowColor = "rgba(0, 0, 0, 0.65)";
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetY = 5;
+  ctx.font = '900 185px "Segoe UI", Impact, sans-serif';
+  ctx.fillText("VANTICK", centerX, 385);
+  ctx.restore();
+
+  const pillW = 980;
+  const pillH = 122;
+  const pillX = centerX - pillW / 2;
+  const pillY = 465;
+
+  ctx.save();
+  const pillGrad = ctx.createLinearGradient(pillX, pillY, pillX + pillW, pillY + pillH);
+  pillGrad.addColorStop(0, "#FDFBF4");
+  pillGrad.addColorStop(0.5, ticketData.foilGold);
+  pillGrad.addColorStop(1, "#D49B2A");
+  ctx.fillStyle = pillGrad;
+  ctx.beginPath();
+  ctx.roundRect(pillX, pillY, pillW, pillH, 24);
+  ctx.fill();
+
+  ctx.fillStyle = "#1A0E04";
+  ctx.font = '900 50px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(ticketData.name.toUpperCase(), centerX, pillY + pillH / 2 + 2);
+  ctx.restore();
+
+  ctx.save();
+  ctx.fillStyle = "#FDFBF4";
+  ctx.font = '700 32px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${ticketData.shortBadge}  •  VÁLIDO EN TODO MÉXICO`, centerX, 690);
+
+  ctx.fillStyle = ticketData.foilGold;
+  ctx.font = '800 26px "Segoe UI", sans-serif';
+  ctx.fillText("CON VANTICK TU DINERO VALE MÁS", centerX, 755);
+  ctx.restore();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function createTicketBackTexture(ticketData) {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.scale(0.5, 0.5);
+
+  const W = 2048;
+  const H = 1024;
+
+  const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+  bgGrad.addColorStop(0, ticketData.secondaryBrown);
+  bgGrad.addColorStop(0.5, ticketData.primaryBrown);
+  bgGrad.addColorStop(1, "#120903");
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = ticketData.foilGold;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(48, 48, W - 96, H - 96);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(64, 64, W - 128, H - 128);
+
+  ctx.globalAlpha = 0.16;
+  drawFilmStripBand(ctx, 90, 95, W - 180, 58, ticketData.foilGold);
+  drawFilmStripBand(ctx, 90, H - 153, W - 180, 58, ticketData.foilGold);
+  ctx.globalAlpha = 1;
+
+  drawSparkleStar(ctx, 260, H / 2, 55, 14, ticketData.foilGold);
+  drawSparkleStar(ctx, W - 260, H / 2, 55, 14, ticketData.foilGold);
+
+  ctx.fillStyle = "#FDFBF4";
+  ctx.font = '900 140px "Segoe UI", Impact, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText("VANTICK", W / 2, H / 2 - 20);
+
+  ctx.fillStyle = ticketData.foilGold;
+  ctx.font = '800 44px "Segoe UI", sans-serif';
+  ctx.fillText(ticketData.name.toUpperCase(), W / 2, H / 2 + 70);
+
+  ctx.fillStyle = "rgba(253, 251, 244, 0.8)";
+  ctx.font = '700 28px "Segoe UI", sans-serif';
+  ctx.fillText("ENTREGA RÁPIDA  •  VIGENCIA DE 30 DÍAS  •  PREVENTAS DISPONIBLES", W / 2, H / 2 + 145);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+const TICKET_W = 2.65;
+const TICKET_H = 1.28;
+const TICKET_DEPTH = 0.036;
+const BEVEL_THICK = 0.008;
+
+function createCinemaTicketShape(w, h) {
+  const hw = w / 2;
+  const hh = h / 2;
+  const stubX = -w * 0.22;
+  const notchR = 0.058;
+  const sideNotchR = 0.055;
+  const sideY = [-0.28, 0, 0.28];
+
+  const shape = new THREE.Shape();
+  shape.moveTo(-hw, -hh);
+
+  shape.lineTo(stubX - notchR, -hh);
+  shape.absarc(stubX, -hh, notchR, Math.PI, 0, true);
+  shape.lineTo(hw, -hh);
+
+  for (let i = 0; i < sideY.length; i++) {
+    const ny = sideY[i];
+    shape.lineTo(hw, ny - sideNotchR);
+    shape.absarc(hw, ny, sideNotchR, -Math.PI / 2, Math.PI / 2, true);
+  }
+  shape.lineTo(hw, hh);
+
+  shape.lineTo(stubX + notchR, hh);
+  shape.absarc(stubX, hh, notchR, 0, Math.PI, true);
+  shape.lineTo(-hw, hh);
+
+  for (let i = sideY.length - 1; i >= 0; i--) {
+    const ny = sideY[i];
+    shape.lineTo(-hw, ny + sideNotchR);
+    shape.absarc(-hw, ny, sideNotchR, Math.PI / 2, -Math.PI / 2, true);
+  }
+  shape.closePath();
+  return shape;
+}
+
+const sharedTicketShape = createCinemaTicketShape(TICKET_W, TICKET_H);
+
+const sharedExtrudeGeo = new THREE.ExtrudeGeometry(sharedTicketShape, {
+  depth: TICKET_DEPTH,
+  bevelEnabled: true,
+  bevelSegments: 2,
+  steps: 1,
+  bevelSize: 0.008,
+  bevelThickness: BEVEL_THICK,
+  curveSegments: 14
+});
+sharedExtrudeGeo.translate(0, 0, -TICKET_DEPTH / 2);
+sharedExtrudeGeo.computeVertexNormals();
+
+function createNormalizedFaceGeometry(shape, w, h) {
+  const geo = new THREE.ShapeGeometry(shape, 14);
+  const pos = geo.attributes.position;
+  const uvs = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    uvs[i * 2] = (x + w / 2) / w;
+    uvs[i * 2 + 1] = (y + h / 2) / h;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  return geo;
+}
+
+const sharedFaceGeo = createNormalizedFaceGeometry(sharedTicketShape, TICKET_W, TICKET_H);
+
+function createSingle3DTicket(ticketData, variantIdx, sharedBackMat, sharedRimMat) {
+  const singleGroup = new THREE.Group();
+
+  const bodyMesh = new THREE.Mesh(sharedExtrudeGeo, sharedRimMat);
+  singleGroup.add(bodyMesh);
+
+  const zOffset = TICKET_DEPTH / 2 + BEVEL_THICK + 0.0015;
+
+  const frontMat = new THREE.MeshStandardMaterial({
+    map: createTicketFrontTexture(ticketData, variantIdx),
+    roughness: 0.38,
+    metalness: 0.14
+  });
+  const frontMesh = new THREE.Mesh(sharedFaceGeo, frontMat);
+  frontMesh.position.z = zOffset;
+  singleGroup.add(frontMesh);
+
+  const backMesh = new THREE.Mesh(sharedFaceGeo, sharedBackMat);
+  backMesh.rotation.y = Math.PI;
+  backMesh.position.z = -zOffset;
+  singleGroup.add(backMesh);
+
+  return singleGroup;
+}
+
+function createTicketPairGroup(ticketData, idx) {
+  const rootGroup = new THREE.Group();
+  rootGroup.userData = { category: 'tickets', itemIndex: idx };
+
+  const floatWrapper = new THREE.Group();
+  rootGroup.add(floatWrapper);
+
+  const sharedRimMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(ticketData.foilGold),
+    roughness: 0.30,
+    metalness: 0.68
+  });
+  const sharedBackMat = new THREE.MeshStandardMaterial({
+    map: createTicketBackTexture(ticketData),
+    roughness: 0.42,
+    metalness: 0.18
+  });
+
+  const ticketA = createSingle3DTicket(ticketData, 1, sharedBackMat, sharedRimMat);
+  const ticketB = createSingle3DTicket(ticketData, 2, sharedBackMat, sharedRimMat);
+
+  ticketA.position.set(0.10, -0.14, 0.065);
+  ticketA.rotation.set(0.02, 0.04, -0.09);
+
+  ticketB.position.set(-0.14, 0.18, -0.065);
+  ticketB.rotation.set(-0.02, -0.05, 0.12);
+
+  floatWrapper.add(ticketB);
+  floatWrapper.add(ticketA);
+
+  rootGroup.userData.floatWrapper = floatWrapper;
+  rootGroup.userData.ticketA = ticketA;
+  rootGroup.userData.ticketB = ticketB;
+
+  scene.add(rootGroup);
+  return rootGroup;
+}
+
+const ticketModels = TICKETS.map((data, idx) => createTicketPairGroup(data, idx));
+
+/* ============================================================================
+   MODELADO 3D PROFESIONAL DE LOS 6 COMBOS DE COMIDA (SIN TEXTO NI MARCA)
+   Texturas procedurales con manchas, grano y desgaste; materiales físicos.
+   ============================================================================ */
+
+function makeSeededRandom(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+function comboAdd(parent, geo, mat, x = 0, y = 0, z = 0) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  parent.add(m);
+  return m;
+}
+
+function paintCanvas(w, h, paint) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  paint(c.getContext('2d'), w, h);
+  return c;
+}
+
+// Textura envolvente para cuerpos de revolución: el centro queda de frente
+function wrapTexture(canvas) {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.offset.x = 0.5;
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+function plainTexture(canvas) {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+// Manchas orgánicas: ruido de pocas celdas, estirado con suavizado y en overlay
+function mottle(ctx, w, h, cells, alpha, seed) {
+  const s = paintCanvas(cells, cells, sc => {
+    const img = sc.createImageData(cells, cells);
+    const rnd = makeSeededRandom(seed);
+    for (let i = 0; i < cells * cells; i++) {
+      const v = rnd() * 255;
+      img.data[i * 4] = v;
+      img.data[i * 4 + 1] = v;
+      img.data[i * 4 + 2] = v;
+      img.data[i * 4 + 3] = 255;
+    }
+    sc.putImageData(img, 0, 0);
+  });
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.globalCompositeOperation = 'overlay';
+  ctx.drawImage(s, 0, 0, w, h);
+  ctx.restore();
+}
+
+// Grano fino de fibra, polvo o sal
+function speckle(ctx, w, h, count, seed, color) {
+  const rnd = makeSeededRandom(seed);
+  ctx.fillStyle = color;
+  for (let i = 0; i < count; i++) ctx.fillRect(rnd() * w, rnd() * h, 1.5, 1.5);
+}
+
+// Mapa de relieve compartido: grano de papel, pan y cartón
+const grainTex = (() => {
+  const tex = new THREE.CanvasTexture(paintCanvas(256, 256, (ctx, w, h) => {
+    const img = ctx.createImageData(w, h);
+    const rnd = makeSeededRandom(11);
+    for (let i = 0; i < w * h; i++) {
+      const v = 110 + rnd() * 120;
+      img.data[i * 4] = v;
+      img.data[i * 4 + 1] = v;
+      img.data[i * 4 + 2] = v;
+      img.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }));
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+})();
+
+const POPCORN_LAYOUT = (() => {
+  const rnd = makeSeededRandom(42);
+  const out = [];
+  for (let i = 0; i < 22; i++) {
+    const a = rnd() * Math.PI * 2;
+    const rr = 0.40 * Math.sqrt(rnd());
+    out.push({
+      x: Math.cos(a) * rr,
+      y: 0.46 + 0.24 * Math.sqrt(Math.max(0, 1 - (rr / 0.44) ** 2)) + 0.02 + rnd() * 0.02,
+      z: Math.sin(a) * rr,
+      v: Math.floor(rnd() * 4),
+      c: Math.floor(rnd() * 3),
+      s: 0.11 * (0.85 + rnd() * 0.3),
+      rot: [rnd() * 3, rnd() * 3, rnd() * 3]
+    });
+  }
+  return out;
+})();
+
+const strawCurve = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(0.04, 0.10, 0),
+  new THREE.Vector3(0.05, 0.42, 0),
+  new THREE.Vector3(0.09, 0.62, 0),
+  new THREE.Vector3(0.16, 0.80, 0),
+  new THREE.Vector3(0.28, 0.90, 0)
+]);
+
+/* ---------- Texturas (sin texto ni marca) ---------- */
+
+function drawGoldBands(ctx, W, H, bandH) {
+  const g = ctx.createLinearGradient(0, 0, W, 0);
+  g.addColorStop(0, '#A36E1C');
+  g.addColorStop(0.5, '#F3C969');
+  g.addColorStop(1, '#A36E1C');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, bandH);
+  ctx.fillRect(0, H - bandH, W, bandH);
+}
+
+function popcornBucketCanvas(style) {
+  return paintCanvas(1024, 512, (ctx, W, H) => {
+    if (style === 'vip') {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#2B1D10');
+      g.addColorStop(1, '#0A0503');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(243,201,105,0.28)';
+      for (let x = 26; x < W; x += 64) ctx.fillRect(x, 0, 6, H);
+    } else {
+      ctx.fillStyle = '#FBF6E9';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = style === 'mix' ? '#6B3813' : '#4A2A0E';
+      for (let x = 0; x < W; x += 64) ctx.fillRect(x, 0, 30, H);
+    }
+    // Manchas de grasa translúcida, como en un vaso usado
+    const rnd = makeSeededRandom(9);
+    for (let i = 0; i < 6; i++) {
+      const x = rnd() * W;
+      const y = H * (0.2 + rnd() * 0.6);
+      const r = 30 + rnd() * 60;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, 'rgba(190,130,40,0.22)');
+      g.addColorStop(1, 'rgba(190,130,40,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    mottle(ctx, W, H, 18, 0.45, 3);
+    speckle(ctx, W, H, 5000, 21, 'rgba(90,60,30,0.12)');
+    drawGoldBands(ctx, W, H, 34);
+  });
+}
+
+function cupCanvas(style) {
+  return paintCanvas(1024, 512, (ctx, W, H) => {
+    if (style === 'icee') {
+      const g = ctx.createLinearGradient(0, 0, W, 0);
+      g.addColorStop(0, '#B91C1C');
+      g.addColorStop(0.46, '#EF4444');
+      g.addColorStop(0.54, '#0284C7');
+      g.addColorStop(1, '#1D4ED8');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+      mottle(ctx, W, H, 40, 0.5, 7);
+      // Cristales de hielo
+      const rnd = makeSeededRandom(19);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      for (let i = 0; i < 90; i++) {
+        ctx.beginPath();
+        ctx.arc(rnd() * W, rnd() * H, 4 + rnd() * 10, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      const vip = style === 'vip';
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, vip ? '#1F160E' : '#4A2A12');
+      g.addColorStop(1, vip ? '#070402' : '#1C0E04');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = vip ? 'rgba(247,207,117,0.18)' : 'rgba(243,201,105,0.13)';
+      ctx.lineWidth = 10;
+      for (let x = -H; x < W; x += 72) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + H, H);
+        ctx.stroke();
+      }
+      mottle(ctx, W, H, 16, 0.3, 5);
+      drawGoldBands(ctx, W, H, 28);
+    }
+    // Reflejo de plástico
+    const sh = ctx.createLinearGradient(W * 0.14, 0, W * 0.3, 0);
+    sh.addColorStop(0, 'rgba(255,255,255,0)');
+    sh.addColorStop(0.5, 'rgba(255,255,255,0.12)');
+    sh.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sh;
+    ctx.fillRect(W * 0.14, 0, W * 0.16, H);
+  });
+}
+
+function cheeseCanvas() {
+  return paintCanvas(256, 256, (ctx, W, H) => {
+    ctx.fillStyle = '#FBBF24';
+    ctx.fillRect(0, 0, W, H);
+    mottle(ctx, W, H, 12, 0.5, 13);
+    speckle(ctx, W, H, 600, 4, 'rgba(255,245,200,0.5)');
+  });
+}
+
+function breadCanvas(base, seed) {
+  return paintCanvas(512, 512, (ctx, W, H) => {
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, W, H);
+    mottle(ctx, W, H, 24, 0.6, seed);
+    speckle(ctx, W, H, 4000, seed + 1, 'rgba(60,25,5,0.35)');
+  });
+}
+
+function sausageCanvas() {
+  return paintCanvas(256, 256, (ctx, W, H) => {
+    ctx.fillStyle = '#7F1D1D';
+    ctx.fillRect(0, 0, W, H);
+    mottle(ctx, W, H, 10, 0.4, 17);
+    // Marcas de parrilla
+    ctx.strokeStyle = 'rgba(30,8,8,0.55)';
+    ctx.lineWidth = 6;
+    for (let x = -H; x < W; x += 56) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + H, H);
+      ctx.stroke();
+    }
+  });
+}
+
+function lettuceCanvas() {
+  return paintCanvas(256, 256, (ctx, W, H) => {
+    ctx.fillStyle = '#22C55E';
+    ctx.fillRect(0, 0, W, H);
+    mottle(ctx, W, H, 14, 0.5, 23);
+    // Nervaduras de la hoja
+    ctx.strokeStyle = 'rgba(190,255,190,0.35)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 14; i++) {
+      ctx.beginPath();
+      ctx.moveTo(128, 128);
+      ctx.lineTo(128 + Math.cos(i * 0.45) * 120, 128 + Math.sin(i * 0.45) * 120);
+      ctx.stroke();
+    }
+  });
+}
+
+function cardboardCanvas(base) {
+  return paintCanvas(512, 512, (ctx, W, H) => {
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, W, H);
+    mottle(ctx, W, H, 20, 0.5, 29);
+    // Fibras del cartón
+    const rnd = makeSeededRandom(31);
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    for (let i = 0; i < 300; i++) {
+      const x = rnd() * W;
+      const y = rnd() * H;
+      ctx.lineWidth = 0.5 + rnd();
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 20 + rnd() * 60, y + (rnd() - 0.5) * 2);
+      ctx.stroke();
+    }
+  });
+}
+
+/* ---------- Geometrías ---------- */
+
+// Cúpula: mitad superior de una esfera escalada a la forma deseada
+function domeGeo(rx, ry, rz) {
+  const g = new THREE.SphereGeometry(1, 36, 18, 0, Math.PI * 2, 0, Math.PI / 2);
+  g.scale(rx, ry, rz);
+  return g;
+}
+
+function ellipsoidGeo(rx, ry, rz) {
+  const g = new THREE.SphereGeometry(1, 28, 16);
+  g.scale(rx, ry, rz);
+  return g;
+}
+
+function cupGeometry(rBottom, rTop, h) {
+  const pts = [new THREE.Vector2(0, -h / 2), new THREE.Vector2(rBottom, -h / 2)];
+  for (let i = 0; i <= 12; i++) {
+    const t = i / 12;
+    pts.push(new THREE.Vector2(rBottom + (rTop - rBottom) * t, -h / 2 + h * t));
+  }
+  return new THREE.LatheGeometry(pts, 48);
+}
+
+function bucketGeometry() {
+  const pts = [new THREE.Vector2(0, -0.47), new THREE.Vector2(0.30, -0.47)];
+  for (let i = 0; i <= 12; i++) {
+    const t = i / 12;
+    pts.push(new THREE.Vector2(0.31 + 0.15 * t + 0.012 * Math.sin(t * Math.PI), -0.46 + 0.93 * t));
+  }
+  return new THREE.LatheGeometry(pts, 48);
+}
+
+function lidGeometry() {
+  const pts = [[0, 0.535], [0.12, 0.53], [0.23, 0.515], [0.30, 0.49], [0.335, 0.45], [0.335, 0.425], [0, 0.425]];
+  return new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), 48);
+}
+
+// Grano de palomita: esfera con lóbulos y arrugas (la costura se deforma igual)
+function kernelGeometry(variant) {
+  const geo = new THREE.SphereGeometry(1, 18, 12);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const n = v.clone().normalize();
+    const k = 1
+      + 0.16 * Math.sin(n.x * 4 + n.z * 3 + variant) * Math.cos(n.y * 5 + variant)
+      + 0.06 * Math.sin((n.x + n.y * 1.7 + n.z * 0.6) * 9 + variant * 2);
+    v.multiplyScalar(k);
+    v.y *= 0.82;
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Granizado: cúpula con vetas rojo y azul
+function slushGeometry() {
+  const g = domeGeo(0.31, 0.2, 0.31);
+  const pos = g.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const red = new THREE.Color(0xDC2626);
+  const blue = new THREE.Color(0x1D4ED8);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    c.copy(red).lerp(blue, 0.5 + 0.5 * Math.sin(x * 16 + z * 7 + Math.sin(y * 20) * 1.2));
+    colors[i * 3] = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return g;
+}
+
+// Charola con esquinas redondeadas; su cara superior queda en y = 0.06
+function trayGeometry() {
+  const w = 0.95, h = 0.56, r = 0.05;
+  const s = new THREE.Shape();
+  s.moveTo(-w / 2 + r, -h / 2);
+  s.lineTo(w / 2 - r, -h / 2);
+  s.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
+  s.lineTo(w / 2, h / 2 - r);
+  s.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2);
+  s.lineTo(-w / 2 + r, h / 2);
+  s.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r);
+  s.lineTo(-w / 2, -h / 2 + r);
+  s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
+  const g = new THREE.ExtrudeGeometry(s, {
+    depth: 0.05,
+    bevelEnabled: true,
+    bevelSize: 0.01,
+    bevelThickness: 0.01,
+    bevelSegments: 2,
+    curveSegments: 6
+  });
+  g.rotateX(-Math.PI / 2);
+  return g;
+}
+
+function chipGeometry() {
+  const s = new THREE.Shape();
+  s.moveTo(0, 0.14);
+  s.lineTo(-0.12, -0.08);
+  s.lineTo(0.12, -0.08);
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, {
+    depth: 0.01,
+    bevelEnabled: true,
+    bevelSize: 0.008,
+    bevelThickness: 0.006,
+    bevelSegments: 1,
+    curveSegments: 1
+  });
+  g.rotateX(-Math.PI / 2);
+  g.center();
+  return g;
+}
+
+function sauceCurve(z0, phase, amp) {
+  const pts = [];
+  for (let i = 0; i <= 12; i++) {
+    pts.push(new THREE.Vector3(-0.36 + i * 0.06, 0, z0 + amp * Math.sin(i * phase)));
+  }
+  return new THREE.CatmullRomCurve3(pts);
+}
+
+const comboSharedGeos = {
+  bucket: bucketGeometry(),
+  bucketRim: new THREE.TorusGeometry(0.465, 0.022, 12, 48),
+  mound: domeGeo(0.44, 0.24, 0.44),
+  kernels: [0, 1, 2, 3].map(kernelGeometry),
+
+  sodaCup: cupGeometry(0.21, 0.31, 0.88),
+  lid: lidGeometry(),
+  lidHole: new THREE.CylinderGeometry(0.03, 0.03, 0.006, 20),
+  collar: new THREE.TorusGeometry(0.335, 0.016, 12, 48),
+  straw: new THREE.TubeGeometry(strawCurve, 40, 0.02, 10, false),
+  clearDome: domeGeo(0.335, 0.2, 0.335),
+  slush: slushGeometry(),
+
+  tray: trayGeometry(),
+  bun: domeGeo(0.44, 0.09, 0.13),
+  sausage: ellipsoidGeo(0.40, 0.065, 0.065),
+  mustard: new THREE.TubeGeometry(sauceCurve(-0.02, 2.2, 0.05), 80, 0.012, 8, false),
+  ketchup: new THREE.TubeGeometry(sauceCurve(0.02, 1.4, 0.03), 80, 0.011, 8, false),
+
+  chip: chipGeometry(),
+  jalapeno: new THREE.CylinderGeometry(0.045, 0.045, 0.016, 20),
+  cheeseBowl: cupGeometry(0.11, 0.14, 0.14),
+  cheeseBowlRim: new THREE.TorusGeometry(0.14, 0.012, 10, 40),
+  cheeseDip: ellipsoidGeo(0.125, 0.035, 0.125),
+
+  baguiBread: domeGeo(0.42, 0.075, 0.13),
+  layer: new THREE.BoxGeometry(0.66, 0.014, 0.18),
+  lettuceTuft: ellipsoidGeo(0.09, 0.03, 0.07),
+  score: new THREE.BoxGeometry(0.03, 0.01, 0.14),
+
+  friesHolder: cupGeometry(0.14, 0.19, 0.34),
+  friesRim: new THREE.TorusGeometry(0.19, 0.012, 10, 40),
+  fry: new THREE.BoxGeometry(0.034, 0.26, 0.034)
+};
+
+const cachedComboMaterials = {
+  bucketTrad: new THREE.MeshStandardMaterial({ map: wrapTexture(popcornBucketCanvas('trad')), bumpMap: grainTex, bumpScale: 0.6, roughness: 0.65, side: THREE.DoubleSide }),
+  bucketMix: new THREE.MeshStandardMaterial({ map: wrapTexture(popcornBucketCanvas('mix')), bumpMap: grainTex, bumpScale: 0.6, roughness: 0.65, side: THREE.DoubleSide }),
+  bucketVIP: new THREE.MeshStandardMaterial({ map: wrapTexture(popcornBucketCanvas('vip')), bumpMap: grainTex, bumpScale: 0.4, roughness: 0.38, metalness: 0.2, side: THREE.DoubleSide }),
+
+  cupLarge: new THREE.MeshPhysicalMaterial({ map: wrapTexture(cupCanvas('large')), roughness: 0.32, clearcoat: 0.7, clearcoatRoughness: 0.15, side: THREE.DoubleSide }),
+  cupJumbo: new THREE.MeshPhysicalMaterial({ map: wrapTexture(cupCanvas('jumbo')), roughness: 0.32, clearcoat: 0.7, clearcoatRoughness: 0.15, side: THREE.DoubleSide }),
+  cupVIP: new THREE.MeshPhysicalMaterial({ map: wrapTexture(cupCanvas('vip')), roughness: 0.3, metalness: 0.15, clearcoat: 0.8, side: THREE.DoubleSide }),
+  cupIcee: new THREE.MeshPhysicalMaterial({ map: wrapTexture(cupCanvas('icee')), roughness: 0.25, clearcoat: 0.8, side: THREE.DoubleSide }),
+
+  goldFoil: new THREE.MeshStandardMaterial({ color: 0xE5B24C, roughness: 0.28, metalness: 0.8, bumpMap: grainTex, bumpScale: 0.1 }),
+  plasticLid: new THREE.MeshPhysicalMaterial({ color: 0xFDFBF4, roughness: 0.18, clearcoat: 1, side: THREE.DoubleSide }),
+  lidHole: new THREE.MeshStandardMaterial({ color: 0x2A1A0E, roughness: 0.8 }),
+  clearDome: new THREE.MeshPhysicalMaterial({ color: 0xE0F2FE, roughness: 0.08, clearcoat: 1, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }),
+  redStraw: new THREE.MeshPhysicalMaterial({ color: 0xDC2626, roughness: 0.25, clearcoat: 0.8 }),
+  goldStraw: new THREE.MeshPhysicalMaterial({ color: 0xF3C969, roughness: 0.25, metalness: 0.6 }),
+  slush: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.3, clearcoat: 0.6 }),
+
+  kernelButter: new THREE.MeshStandardMaterial({ color: 0xFDE047, roughness: 0.55, bumpMap: grainTex, bumpScale: 0.8 }),
+  kernelCheddar: new THREE.MeshStandardMaterial({ color: 0xF59E0B, roughness: 0.5, bumpMap: grainTex, bumpScale: 0.8 }),
+  kernelCaramel: new THREE.MeshPhysicalMaterial({ color: 0xB45309, roughness: 0.35, clearcoat: 0.6, bumpMap: grainTex, bumpScale: 0.8 }),
+
+  trayCardboard: new THREE.MeshStandardMaterial({ map: plainTexture(cardboardCanvas('#5A3414')), bumpMap: grainTex, bumpScale: 1.2, roughness: 0.85 }),
+  trayVIP: new THREE.MeshStandardMaterial({ color: 0x16100B, roughness: 0.35, metalness: 0.35, bumpMap: grainTex, bumpScale: 0.3 }),
+  bowlPaper: new THREE.MeshStandardMaterial({ color: 0xF3E9D2, roughness: 0.75, bumpMap: grainTex, bumpScale: 0.4, side: THREE.DoubleSide }),
+  friesHolder: new THREE.MeshStandardMaterial({ color: 0x16100B, roughness: 0.4, bumpMap: grainTex, bumpScale: 0.3, side: THREE.DoubleSide }),
+  fries: [0xFBBF24, 0xF59E0B, 0xFCD34D].map(color => new THREE.MeshStandardMaterial({ color, roughness: 0.45, bumpMap: grainTex, bumpScale: 0.6 })),
+
+  bunBread: new THREE.MeshStandardMaterial({ map: plainTexture(breadCanvas('#D97706', 31)), bumpMap: grainTex, bumpScale: 0.8, roughness: 0.7, side: THREE.DoubleSide }),
+  baguiCrust: new THREE.MeshStandardMaterial({ map: plainTexture(breadCanvas('#B8601A', 41)), bumpMap: grainTex, bumpScale: 0.8, roughness: 0.7, side: THREE.DoubleSide }),
+  sausageMeat: new THREE.MeshPhysicalMaterial({ map: plainTexture(sausageCanvas()), roughness: 0.4, clearcoat: 0.35 }),
+  mustardYellow: new THREE.MeshPhysicalMaterial({ color: 0xFACC15, roughness: 0.2, clearcoat: 1 }),
+  ketchupRed: new THREE.MeshPhysicalMaterial({ color: 0xDC2626, roughness: 0.2, clearcoat: 1 }),
+  nachoCorn: new THREE.MeshStandardMaterial({ color: 0xF59E0B, roughness: 0.6, bumpMap: grainTex, bumpScale: 0.8, side: THREE.DoubleSide }),
+  meltedCheese: new THREE.MeshPhysicalMaterial({ map: plainTexture(cheeseCanvas()), roughness: 0.15, clearcoat: 1 }),
+  jalapenoGreen: new THREE.MeshStandardMaterial({ color: 0x15803D, roughness: 0.45, bumpMap: grainTex, bumpScale: 0.3 }),
+  hamPink: new THREE.MeshStandardMaterial({ color: 0xFB7185, roughness: 0.5 }),
+  lettuceGreen: new THREE.MeshStandardMaterial({ map: plainTexture(lettuceCanvas()), roughness: 0.6, side: THREE.DoubleSide }),
+  flour: new THREE.MeshStandardMaterial({ color: 0xFDFBF4, roughness: 0.9 })
+};
+
+/* ---------- Constructores de cada combo ---------- */
+
+function build3DPopcornBucket(isVIP = false, isMix = false) {
+  const g = new THREE.Group();
+  const body = isVIP
+    ? cachedComboMaterials.bucketVIP
+    : (isMix ? cachedComboMaterials.bucketMix : cachedComboMaterials.bucketTrad);
+  comboAdd(g, comboSharedGeos.bucket, body);
+
+  const rim = comboAdd(g, comboSharedGeos.bucketRim, cachedComboMaterials.goldFoil, 0, 0.47, 0);
+  rim.rotation.x = Math.PI / 2;
+
+  comboAdd(g, comboSharedGeos.mound, cachedComboMaterials.kernelButter, 0, 0.46, 0);
+
+  const palette = isVIP
+    ? [cachedComboMaterials.kernelButter, cachedComboMaterials.kernelCaramel]
+    : (isMix
+      ? [cachedComboMaterials.kernelButter, cachedComboMaterials.kernelCheddar, cachedComboMaterials.kernelCaramel]
+      : [cachedComboMaterials.kernelButter, cachedComboMaterials.kernelCheddar]);
+
+  POPCORN_LAYOUT.forEach(k => {
+    const m = comboAdd(g, comboSharedGeos.kernels[k.v], palette[k.c % palette.length], k.x, k.y, k.z);
+    m.rotation.set(k.rot[0], k.rot[1], k.rot[2]);
+    m.scale.setScalar(k.s);
+  });
+  return g;
+}
+
+function build3DSodaCup(style = 'large') {
+  const g = new THREE.Group();
+  const cupMat = style === 'vip'
+    ? cachedComboMaterials.cupVIP
+    : (style === 'jumbo' ? cachedComboMaterials.cupJumbo : cachedComboMaterials.cupLarge);
+  comboAdd(g, comboSharedGeos.sodaCup, cupMat);
+  comboAdd(g, comboSharedGeos.lid, cachedComboMaterials.plasticLid);
+  comboAdd(g, comboSharedGeos.lidHole, cachedComboMaterials.lidHole, 0.06, 0.536, 0);
+
+  const collar = comboAdd(g, comboSharedGeos.collar, cachedComboMaterials.goldFoil, 0, 0.425, 0);
+  collar.rotation.x = Math.PI / 2;
+
+  const strawMat = style === 'vip' ? cachedComboMaterials.goldStraw : cachedComboMaterials.redStraw;
+  comboAdd(g, comboSharedGeos.straw, strawMat);
+
+  if (style === 'jumbo') g.scale.set(1.12, 1.14, 1.12);
+  return g;
+}
+
+function build3DIceeCup() {
+  const g = new THREE.Group();
+  comboAdd(g, comboSharedGeos.sodaCup, cachedComboMaterials.cupIcee);
+  comboAdd(g, comboSharedGeos.slush, cachedComboMaterials.slush, 0, 0.44, 0);
+  comboAdd(g, comboSharedGeos.clearDome, cachedComboMaterials.clearDome, 0, 0.44, 0);
+
+  const collar = comboAdd(g, comboSharedGeos.collar, cachedComboMaterials.goldFoil, 0, 0.44, 0);
+  collar.rotation.x = Math.PI / 2;
+
+  comboAdd(g, comboSharedGeos.straw, cachedComboMaterials.redStraw);
+  g.scale.set(1.06, 1.08, 1.06);
+  return g;
+}
+
+function build3DHotdogTray() {
+  const g = new THREE.Group();
+  comboAdd(g, comboSharedGeos.tray, cachedComboMaterials.trayCardboard);
+  comboAdd(g, comboSharedGeos.bun, cachedComboMaterials.bunBread, 0, 0.06, 0);
+  comboAdd(g, comboSharedGeos.sausage, cachedComboMaterials.sausageMeat, 0, 0.12, 0);
+  comboAdd(g, comboSharedGeos.mustard, cachedComboMaterials.mustardYellow, 0, 0.19, 0);
+  comboAdd(g, comboSharedGeos.ketchup, cachedComboMaterials.ketchupRed, 0, 0.195, 0);
+  return g;
+}
+
+function build3DNachosTray() {
+  const g = new THREE.Group();
+  comboAdd(g, comboSharedGeos.tray, cachedComboMaterials.trayCardboard);
+
+  const bowlX = 0.27, bowlZ = 0.04;
+  comboAdd(g, comboSharedGeos.cheeseBowl, cachedComboMaterials.bowlPaper, bowlX, 0.13, bowlZ);
+  const rim = comboAdd(g, comboSharedGeos.cheeseBowlRim, cachedComboMaterials.goldFoil, bowlX, 0.20, bowlZ);
+  rim.rotation.x = Math.PI / 2;
+  comboAdd(g, comboSharedGeos.cheeseDip, cachedComboMaterials.meltedCheese, bowlX, 0.185, bowlZ);
+
+  const rnd = makeSeededRandom(77);
+  for (let i = 0; i < 22; i++) {
+    const chip = comboAdd(g, comboSharedGeos.chip, cachedComboMaterials.nachoCorn,
+      -0.36 + rnd() * 0.36, 0.075 + (i >> 3) * 0.026, (rnd() - 0.5) * 0.36);
+    chip.rotation.set((rnd() - 0.5) * 0.5, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.5);
+  }
+  for (let j = 0; j < 6; j++) {
+    const jal = comboAdd(g, comboSharedGeos.jalapeno, cachedComboMaterials.jalapenoGreen,
+      -0.36 + rnd() * 0.34, 0.12 + rnd() * 0.03, (rnd() - 0.5) * 0.3);
+    jal.rotation.set((rnd() - 0.5) * 0.6, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.6);
+  }
+  return g;
+}
+
+function build3DBaguiWithFriesVIP() {
+  const g = new THREE.Group();
+  const tray = comboAdd(g, comboSharedGeos.tray, cachedComboMaterials.trayVIP);
+  tray.scale.set(1.12, 1, 1.08);
+
+  // Bagui por capas: pan, jamón, queso, lechuga y pan superior
+  const bagui = new THREE.Group();
+  bagui.position.set(-0.14, 0.06, 0.02);
+  comboAdd(bagui, comboSharedGeos.baguiBread, cachedComboMaterials.baguiCrust, 0, 0, 0);
+  comboAdd(bagui, comboSharedGeos.layer, cachedComboMaterials.hamPink, 0, 0.078, 0);
+  const cheese = comboAdd(bagui, comboSharedGeos.layer, cachedComboMaterials.meltedCheese, 0, 0.092, 0);
+  cheese.rotation.y = 0.04;
+
+  for (let i = 0; i < 6; i++) {
+    const tuft = comboAdd(bagui, comboSharedGeos.lettuceTuft, cachedComboMaterials.lettuceGreen,
+      -0.27 + i * 0.108, 0.10, i % 2 ? 0.03 : -0.03);
+    tuft.rotation.y = i * 0.7;
+  }
+
+  comboAdd(bagui, comboSharedGeos.baguiBread, cachedComboMaterials.baguiCrust, 0, 0.10, 0);
+  [-0.2, 0, 0.2].forEach(x => {
+    const s = comboAdd(bagui, comboSharedGeos.score, cachedComboMaterials.flour, x, 0.175, 0);
+    s.rotation.y = 0.5;
+  });
+  g.add(bagui);
+
+  // Cajita de papas con borde dorado
+  const fries = new THREE.Group();
+  fries.position.set(0.34, 0.23, -0.02);
+  comboAdd(fries, comboSharedGeos.friesHolder, cachedComboMaterials.friesHolder);
+  const ring = comboAdd(fries, comboSharedGeos.friesRim, cachedComboMaterials.goldFoil, 0, 0.17, 0);
+  ring.rotation.x = Math.PI / 2;
+
+  const rnd = makeSeededRandom(5);
+  for (let f = 0; f < 26; f++) {
+    const a = rnd() * Math.PI * 2;
+    const r = 0.02 + rnd() * 0.11;
+    const stick = comboAdd(fries, comboSharedGeos.fry, cachedComboMaterials.fries[f % 3],
+      Math.cos(a) * r, 0.04 + rnd() * 0.1, Math.sin(a) * r);
+    stick.rotation.set(Math.sin(a) * 0.15, rnd() * Math.PI, Math.cos(a) * 0.15);
+  }
+  g.add(fries);
+  return g;
+}
+
+function registerComboPart(partMesh, defPos, defRot, pricePos, priceRot) {
+  partMesh.position.set(defPos[0], defPos[1], defPos[2]);
+  partMesh.rotation.set(defRot[0], defRot[1], defRot[2]);
+  partMesh.userData.defPos = defPos;
+  partMesh.userData.defRot = defRot;
+  partMesh.userData.pricePos = pricePos;
+  partMesh.userData.priceRot = priceRot;
+  return partMesh;
+}
+
+function createCombo3DGroup(comboData, idx) {
+  const rootGroup = new THREE.Group();
+  rootGroup.userData = { category: 'combos', itemIndex: idx };
+
+  const floatWrapper = new THREE.Group();
+  rootGroup.add(floatWrapper);
+
+  const parts = [];
+  const type = comboData.comboType;
+
+  if (type === 'jumbo_trad') {
+    // Palomitas mix (2 sabores) + Refresco jumbo
+    const popMix = registerComboPart(
+      build3DPopcornBucket(false, true),
+      [-0.42, -0.08, 0.06], [0.06, 0.22, 0.04],
+      [-0.64, -0.04, 0.18], [0.12, 0.35, 0.08]
+    );
+    const sodaJumbo = registerComboPart(
+      build3DSodaCup('jumbo'),
+      [0.48, -0.06, -0.04], [0.04, -0.24, -0.05],
+      [0.68, 0.02, 0.14], [0.10, -0.36, -0.10]
+    );
+    parts.push(popMix, sodaJumbo);
+  } else if (type === 'hotdog_trad') {
+    // Palomitas grandes + Refresco grande + Hotdog grande
+    const pop = registerComboPart(
+      build3DPopcornBucket(false, false),
+      [-0.48, 0.04, -0.14], [0.04, 0.20, 0.03],
+      [-0.72, 0.12, -0.05], [0.08, 0.32, 0.06]
+    );
+    const soda = registerComboPart(
+      build3DSodaCup('large'),
+      [0.52, 0.04, -0.14], [0.04, -0.22, -0.04],
+      [0.74, 0.12, -0.05], [0.08, -0.34, -0.08]
+    );
+    const hotdog = registerComboPart(
+      build3DHotdogTray(),
+      [0.02, -0.42, 0.42], [0.16, -0.08, 0.0],
+      [0.0, -0.46, 0.68], [0.28, 0.0, 0.02]
+    );
+    parts.push(pop, soda, hotdog);
+  } else if (type === 'nachos_gde') {
+    // Palomitas grandes + Refresco grande + Nachos grandes
+    const pop = registerComboPart(
+      build3DPopcornBucket(false, false),
+      [-0.48, 0.04, -0.14], [0.04, 0.20, 0.03],
+      [-0.72, 0.12, -0.05], [0.08, 0.32, 0.06]
+    );
+    const soda = registerComboPart(
+      build3DSodaCup('large'),
+      [0.52, 0.04, -0.14], [0.04, -0.22, -0.04],
+      [0.74, 0.12, -0.05], [0.08, -0.34, -0.08]
+    );
+    const nachos = registerComboPart(
+      build3DNachosTray(),
+      [0.02, -0.42, 0.42], [0.18, 0.08, 0.0],
+      [0.0, -0.46, 0.68], [0.30, 0.0, -0.02]
+    );
+    parts.push(pop, soda, nachos);
+  } else if (type === 'ice_gde') {
+    // Palomitas grandes + ICE grande
+    const pop = registerComboPart(
+      build3DPopcornBucket(false, false),
+      [-0.42, -0.08, 0.06], [0.06, 0.22, 0.04],
+      [-0.64, -0.02, 0.18], [0.12, 0.34, 0.08]
+    );
+    const icee = registerComboPart(
+      build3DIceeCup(),
+      [0.46, -0.08, -0.02], [0.04, -0.22, -0.05],
+      [0.66, 0.0, 0.16], [0.10, -0.35, -0.09]
+    );
+    parts.push(pop, icee);
+  } else if (type === 'jumbo_vip') {
+    // Palomitas grandes VIP + Refresco grande VIP
+    const popVIP = registerComboPart(
+      build3DPopcornBucket(true, false),
+      [-0.42, -0.08, 0.06], [0.06, 0.22, 0.04],
+      [-0.64, -0.02, 0.18], [0.12, 0.34, 0.08]
+    );
+    const sodaVIP = registerComboPart(
+      build3DSodaCup('vip'),
+      [0.46, -0.08, -0.02], [0.04, -0.22, -0.05],
+      [0.66, 0.0, 0.16], [0.10, -0.35, -0.09]
+    );
+    parts.push(popVIP, sodaVIP);
+  } else if (type === 'bagui_vip') {
+    // Palomitas grandes VIP + Refresco grande VIP + Bagui clásico con papas
+    const popVIP = registerComboPart(
+      build3DPopcornBucket(true, false),
+      [-0.50, 0.04, -0.16], [0.04, 0.20, 0.03],
+      [-0.74, 0.12, -0.06], [0.08, 0.32, 0.06]
+    );
+    const sodaVIP = registerComboPart(
+      build3DSodaCup('vip'),
+      [0.54, 0.04, -0.16], [0.04, -0.22, -0.04],
+      [0.76, 0.12, -0.06], [0.08, -0.34, -0.08]
+    );
+    const bagui = registerComboPart(
+      build3DBaguiWithFriesVIP(),
+      [0.0, -0.42, 0.44], [0.18, -0.06, 0.0],
+      [0.0, -0.45, 0.70], [0.30, 0.0, 0.0]
+    );
+    parts.push(popVIP, sodaVIP, bagui);
+  }
+
+  parts.forEach(p => floatWrapper.add(p));
+  rootGroup.userData.floatWrapper = floatWrapper;
+  rootGroup.userData.parts = parts;
+
+  // Posición inicial oculta debajo del escenario mientras arranca en Boletos
+  rootGroup.position.set(0, -10, -4);
+  rootGroup.scale.set(0.001, 0.001, 0.001);
+
+  scene.add(rootGroup);
+  return rootGroup;
+}
+
+const comboModels = COMBOS.map((data, idx) => createCombo3DGroup(data, idx));
+const allInteractiveModels = [...ticketModels, ...comboModels];
+
+function animateComboPose(group, modePose, dur = 0.52) {
+  const parts = group.userData.parts;
+  if (!parts) return;
+
+  parts.forEach(part => {
+    const targetP = modePose === 'price' ? part.userData.pricePos : part.userData.defPos;
+    const targetR = modePose === 'price' ? part.userData.priceRot : part.userData.defRot;
+    gsap.to(part.position, {
+      x: targetP[0],
+      y: targetP[1],
+      z: targetP[2],
+      duration: dur,
+      ease: modePose === 'price' ? "back.out(1.4)" : "power3.out",
+      overwrite: "auto"
+    });
+    gsap.to(part.rotation, {
+      x: targetR[0],
+      y: targetR[1],
+      z: targetR[2],
+      duration: dur,
+      ease: "expo.out",
+      overwrite: "auto"
+    });
+  });
+}
+
+/* ============================================================================
+   ETIQUETAS Y CÁPSULA DIVISORIA "COMBOS" EN 3. COLECCIÓN (CON SCROLL VERTICAL)
+   ============================================================================ */
+const ticketLineupLabels = TICKETS.map((data, idx) => {
+  const lbl = document.createElement('div');
+  lbl.className = 'lineup-item-label';
+  lbl.textContent = data.name;
+  lbl.onclick = (e) => {
+    e.stopPropagation();
+    selectItemFromLineup('tickets', idx);
+  };
+  lineupLabelsContainer.appendChild(lbl);
+  return lbl;
+});
+
+// Cápsula divisoria translúcida "Combos" en el centro debajo de los boletos
+const combosDividerEl = document.createElement('div');
+combosDividerEl.className = 'lineup-section-capsule';
+combosDividerEl.textContent = 'Combos';
+lineupLabelsContainer.appendChild(combosDividerEl);
+
+const comboLineupLabels = COMBOS.map((data, idx) => {
+  const lbl = document.createElement('div');
+  lbl.className = 'lineup-item-label';
+  lbl.textContent = data.name;
+  lbl.onclick = (e) => {
+    e.stopPropagation();
+    selectItemFromLineup('combos', idx);
+  };
+  lineupLabelsContainer.appendChild(lbl);
+  return lbl;
+});
+
+const dividerWorldPos = new THREE.Vector3(0, -0.58, 2.0);
+
+function selectItemFromLineup(category, idx) {
+  if (currentMode !== 'lineup') return;
+  activeCategory = category;
+  currentIndex = idx;
+  currentStep = 0;
+  syncCarouselCategoryButtonUI();
+  setMode('detail');
+}
+
+const projVec = new THREE.Vector3();
+
+function projectElementToScreen(el, wx, wy, wz) {
+  projVec.set(wx, wy, wz);
+  projVec.project(camera);
+  const sx = (projVec.x * 0.5 + 0.5) * cachedVpWidth;
+  const sy = (-(projVec.y * 0.5) + 0.5) * cachedVpHeight;
+
+  // Atenúa suavemente si se acerca al borde superior de la barra de navegación
+  const topFade = sy < 86 ? Math.max(0, (sy - 52) / 34) : (sy > cachedVpHeight - 16 ? 0 : 1);
+  el.style.opacity = topFade.toFixed(2);
+  el.style.pointerEvents = topFade > 0.35 ? 'auto' : 'none';
+  el.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(-50%, -50%)`;
+}
+
+function updateLineupLabelsScreenPositions() {
+  if (currentMode !== 'lineup') return;
+  const useCompact = isCompactView();
+  const ticketYOffset = useCompact ? -0.45 : -0.62;
+  const comboYOffset = useCompact ? -0.50 : -0.68;
+
+  for (let i = 0; i < ticketModels.length; i++) {
+    const item = ticketModels[i];
+    projectElementToScreen(ticketLineupLabels[i], item.position.x, item.position.y + ticketYOffset, item.position.z);
+  }
+
+  // Proyección de la cápsula divisoria "Combos"
+  projVec.copy(dividerWorldPos);
+  projVec.project(camera);
+  const divX = (projVec.x * 0.5 + 0.5) * cachedVpWidth;
+  const divY = (-(projVec.y * 0.5) + 0.5) * cachedVpHeight;
+  const divFade = divY < 86 ? Math.max(0, (divY - 52) / 34) : 1;
+  combosDividerEl.style.opacity = divFade.toFixed(2);
+  combosDividerEl.style.transform = `translate3d(${divX.toFixed(1)}px, ${divY.toFixed(1)}px, 0) translate(-50%, -50%)`;
+
+  for (let j = 0; j < comboModels.length; j++) {
+    const item = comboModels[j];
+    projectElementToScreen(comboLineupLabels[j], item.position.x, item.position.y + comboYOffset, item.position.z);
+  }
+
+  // Actualizar posición del indicador de la barra de scroll lateral
+  const thumbEl = document.getElementById('lineup-scroll-thumb');
+  if (thumbEl && maxCollectionScrollY > 0) {
+    const ratio = Math.max(0, Math.min(1, collectionScrollY / maxCollectionScrollY));
+    const maxTrackMove = useCompact ? (95 - 28) : (130 - 38);
+    thumbEl.style.transform = `translate3d(0, ${(ratio * maxTrackMove).toFixed(1)}px, 0)`;
+  }
+}
+
+function scrollCollectionBy(deltaWorldY) {
+  if (currentMode !== 'lineup') return;
+  collectionTargetScrollY = Math.max(0, Math.min(maxCollectionScrollY, collectionTargetScrollY + deltaWorldY));
+}
+
+function animateTicketPairPose(group, modePose, dur = 0.52) {
+  const { ticketA, ticketB } = group.userData;
+  if (!ticketA || !ticketB) return;
+
+  gsap.killTweensOf([ticketA.position, ticketA.rotation, ticketA.scale, ticketB.position, ticketB.rotation, ticketB.scale]);
+
+  if (modePose === 'single') {
+    gsap.to(ticketA.position, { x: 0.0, y: 0.02, z: 0.12, duration: dur, ease: "expo.out", overwrite: "auto" });
+    gsap.to(ticketA.rotation, { x: 0.02, y: -0.08, z: -0.02, duration: dur, ease: "expo.out", overwrite: "auto" });
+    gsap.to(ticketA.scale, { x: 1.07, y: 1.07, z: 1.07, duration: dur, ease: "back.out(1.35)", overwrite: "auto" });
+
+    gsap.to(ticketB.position, { x: 0.0, y: 0.02, z: 0.04, duration: dur * 0.68, ease: "expo.inOut", overwrite: "auto" });
+    gsap.to(ticketB.rotation, { x: 0.02, y: -0.08, z: -0.02, duration: dur * 0.68, ease: "expo.inOut", overwrite: "auto" });
+    gsap.to(ticketB.scale, {
+      x: 0.001,
+      y: 0.001,
+      z: 0.001,
+      duration: dur * 0.7,
+      ease: "power3.inOut",
+      overwrite: "auto",
+      onComplete: () => {
+        if (activeCategory === 'tickets' && isSingleTicket2D && currentMode === 'detail' && currentStep === 1 && currentIndex === 0) {
+          ticketB.visible = false;
+        }
+      }
+    });
+  } else if (modePose === 'price') {
+    ticketB.visible = true;
+    gsap.to(ticketA.position, { x: 0.28, y: -0.32, z: 0.22, duration: dur, ease: "back.out(1.35)", overwrite: "auto" });
+    gsap.to(ticketA.rotation, { x: 0.10, y: -0.22, z: -0.20, duration: dur, ease: "expo.out", overwrite: "auto" });
+    gsap.to(ticketA.scale, { x: 1.0, y: 1.0, z: 1.0, duration: dur, ease: "power3.out", overwrite: "auto" });
+
+    gsap.to(ticketB.position, { x: -0.28, y: 0.34, z: -0.14, duration: dur, ease: "back.out(1.35)", overwrite: "auto" });
+    gsap.to(ticketB.rotation, { x: -0.08, y: 0.20, z: 0.22, duration: dur, ease: "expo.out", overwrite: "auto" });
+    gsap.to(ticketB.scale, { x: 1.0, y: 1.0, z: 1.0, duration: dur, ease: "back.out(1.25)", overwrite: "auto" });
+  } else {
+    ticketB.visible = true;
+    gsap.to(ticketA.position, { x: 0.10, y: -0.14, z: 0.065, duration: dur, ease: "power3.out", overwrite: "auto" });
+    gsap.to(ticketA.rotation, { x: 0.02, y: 0.04, z: -0.09, duration: dur, ease: "power3.out", overwrite: "auto" });
+    gsap.to(ticketA.scale, { x: 1.0, y: 1.0, z: 1.0, duration: dur, ease: "power3.out", overwrite: "auto" });
+
+    gsap.to(ticketB.position, { x: -0.14, y: 0.18, z: -0.065, duration: dur, ease: "power3.out", overwrite: "auto" });
+    gsap.to(ticketB.rotation, { x: -0.02, y: -0.05, z: 0.12, duration: dur, ease: "power3.out", overwrite: "auto" });
+    gsap.to(ticketB.scale, { x: 1.0, y: 1.0, z: 1.0, duration: dur, ease: "power3.out", overwrite: "auto" });
+  }
+}
+
+function toggleSingleTicket2D(forceState) {
+  if (activeCategory !== 'tickets' || currentIndex !== 0 || currentMode !== 'detail' || currentStep !== 1) return;
+
+  isSingleTicket2D = typeof forceState === 'boolean' ? forceState : !isSingleTicket2D;
+  renderDetailPanelContent(false);
+
+  const item = ticketModels[0];
+  const useCompact = isCompactView();
+  const baseY = useCompact ? 0.78 : 0.14;
+
+  if (isSingleTicket2D) {
+    animateTicketPairPose(item, 'single', 0.55);
+    const targetCamZ = useCompact ? 11.2 : 9.15;
+    gsap.to(item.rotation, { x: -0.05, y: 0.22, z: 0.02, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+    gsap.to(item.position, { y: baseY + 0.05, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+    gsap.to(camera.position, { z: targetCamZ, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+  } else {
+    animateTicketPairPose(item, 'price', 0.55);
+    const targetCamZ = useCompact ? 11.8 : 9.6;
+    gsap.to(item.rotation, { x: -0.14, y: 0.38, z: 0.08, duration: 0.58, ease: "back.out(1.3)", overwrite: "auto" });
+    gsap.to(item.position, { y: baseY + 0.08, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+    gsap.to(camera.position, { z: targetCamZ, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+  }
+}
+
+setTimeout(() => {
+  const badge = document.getElementById('loader-badge');
+  if (badge) badge.style.opacity = '0';
+}, 1100);
+
+function toggleScreenFormat() {
+  isMobileFormat = !isMobileFormat;
+  applyViewportDimensions();
+
+  const start = performance.now();
+  function syncCanvas(now) {
+    handleResize();
+    if (now - start < 400) requestAnimationFrame(syncCanvas);
+  }
+  requestAnimationFrame(syncCanvas);
+  updatePositions(0.45);
+}
+
+function getActiveDataList() {
+  return activeCategory === 'tickets' ? TICKETS : COMBOS;
+}
+
+function getActiveModelList() {
+  return activeCategory === 'tickets' ? ticketModels : comboModels;
+}
+
+function syncCarouselCategoryButtonUI() {
+  const btn = document.getElementById('carousel-combos-btn');
+  const lbl = document.getElementById('carousel-combos-label');
+  if (!btn || !lbl) return;
+
+  // El botón en forma de cápsula dice "Combos" y se ilumina cuando el carrusel de Combos está activo
+  lbl.textContent = "Combos";
+  btn.classList.toggle('active-cat', activeCategory === 'combos');
+}
+
+// Cambia mediante animación fluida entre los 4 Boletos y los 6 Combos en el Carrusel
+function toggleCarouselCategory() {
+  activeCategory = activeCategory === 'tickets' ? 'combos' : 'tickets';
+  currentIndex = 0;
+  isSingleTicket2D = false;
+  syncCarouselCategoryButtonUI();
+  updatePositions(0.62);
+}
+
+function getBaseScale(isFront, cat = activeCategory) {
+  const useCompact = isCompactView();
+  const isCombo = cat === 'combos';
+
+  if (currentMode === 'detail') {
+    return isCombo ? (useCompact ? 0.72 : 0.98) : (useCompact ? 0.64 : 0.90);
+  } else if (currentMode === 'lineup') {
+    return isCombo ? (useCompact ? 0.50 : 0.68) : (useCompact ? 0.45 : 0.64);
+  } else {
+    if (isCombo) {
+      return isFront ? (useCompact ? 0.72 : 0.94) : (useCompact ? 0.38 : 0.54);
+    } else {
+      return isFront ? (useCompact ? 0.66 : 0.88) : (useCompact ? 0.40 : 0.58);
+    }
+  }
+}
+
+function updatePositions(dur = 0.52) {
+  const activeData = getActiveDataList();
+  const activeModels = getActiveModelList();
+  const inactiveModels = activeCategory === 'tickets' ? comboModels : ticketModels;
+
+  if (currentIndex >= activeData.length) currentIndex = 0;
+  const itemData = activeData[currentIndex];
+
+  document.getElementById('flavor-name').textContent = itemData.name;
+  document.getElementById('flavor-banner').style.background = itemData.bannerBg;
+  document.getElementById('brand-sub').style.color = itemData.accent;
+  if (bgRadialGlow) bgRadialGlow.style.color = itemData.bgRadial;
+  ringMat.color.set(itemData.accent);
+  rimLight.color.set(itemData.accent);
+
+  const useCompact = isCompactView();
+  camera.fov = useCompact ? 45 : 36;
+  camera.updateProjectionMatrix();
+
+  if (currentMode === 'carousel') {
+    isSingleTicket2D = false;
+    const pedScale = useCompact ? 0.62 : 0.88;
+    gsap.to(pedestalGroup.scale, { x: pedScale, y: pedScale, z: pedScale, duration: 0.4, overwrite: "auto" });
+    gsap.to(pedestalGroup.position, {
+      x: 0,
+      y: useCompact ? -0.95 : -1.22,
+      z: useCompact ? 2.0 : 2.6,
+      duration: 0.4,
+      overwrite: "auto"
+    });
+    gsap.to(camera.position, {
+      x: 0,
+      z: useCompact ? 13.5 : 11.2,
+      duration: dur,
+      ease: "expo.out",
+      overwrite: "auto"
+    });
+
+    const isCombo = activeCategory === 'combos';
+    const radiusX = isCombo ? (useCompact ? 1.65 : 3.25) : (useCompact ? 1.45 : 2.85);
+    const radiusZ = isCombo ? (useCompact ? 2.15 : 2.75) : (useCompact ? 2.0 : 2.6);
+
+    // Retirar suavemente los modelos de la categoría inactiva
+    inactiveModels.forEach((item, i) => {
+      if (item.userData.category === 'tickets') animateTicketPairPose(item, 'default', 0.35);
+      else animateComboPose(item, 'default', 0.35);
+
+      gsap.to(item.position, {
+        x: (i - 1.5) * 2.2,
+        y: -7.5,
+        z: -3.5,
+        duration: dur * 0.85,
+        ease: "power3.inOut",
+        overwrite: "auto"
+      });
+      gsap.to(item.scale, {
+        x: 0.001,
+        y: 0.001,
+        z: 0.001,
+        duration: dur * 0.75,
+        ease: "power3.inOut",
+        overwrite: "auto"
+      });
+    });
+
+    // Posicionar en carrusel los modelos de la categoría activa (4 Boletos o 6 Combos)
+    activeModels.forEach((item, i) => {
+      if (isCombo) animateComboPose(item, 'default', dur);
+      else animateTicketPairPose(item, 'default', dur);
+
+      const off = (i - currentIndex + activeModels.length) % activeModels.length;
+      const ang = (off / activeModels.length) * Math.PI * 2;
+      const front = off === 0;
+      const sc = getBaseScale(front, activeCategory);
+
+      gsap.to(item.position, {
+        x: Math.sin(ang) * radiusX,
+        y: front ? (useCompact ? 0.14 : 0.08) : (useCompact ? 0.30 : 0.25),
+        z: Math.cos(ang) * radiusZ,
+        duration: dur,
+        ease: "expo.out",
+        overwrite: "auto"
+      });
+      gsap.to(item.rotation, {
+        x: front ? 0.05 : 0.06,
+        y: -ang * 0.62,
+        z: 0,
+        duration: dur,
+        ease: "expo.out",
+        overwrite: "auto"
+      });
+      gsap.to(item.scale, {
+        x: sc,
+        y: sc,
+        z: sc,
+        duration: dur,
+        ease: "expo.out",
+        overwrite: "auto"
+      });
+    });
+  } else if (currentMode === 'detail') {
+    gsap.to(pedestalGroup.scale, { x: 0.001, y: 0.001, z: 0.001, duration: 0.3, overwrite: "auto" });
+
+    inactiveModels.forEach((item, i) => {
+      gsap.to(item.position, { x: (i - 2) * 5.5, y: -8.5, z: -4, duration: 0.35, overwrite: "auto" });
+      gsap.to(item.scale, { x: 0.001, y: 0.001, z: 0.001, duration: 0.35, overwrite: "auto" });
+    });
+
+    activeModels.forEach((item, i) => {
+      if (i === currentIndex) {
+        const targetX = useCompact ? 0.0 : 0.34;
+        const targetY = useCompact ? 0.78 : 0.14;
+        const targetZ = useCompact ? 3.8 : 4.35;
+        const sc = getBaseScale(true, activeCategory);
+        gsap.to(item.position, { x: targetX, y: targetY, z: targetZ, duration: dur, ease: "expo.out", overwrite: "auto" });
+        gsap.to(item.scale, { x: sc, y: sc, z: sc, duration: dur, ease: "expo.out", overwrite: "auto" });
+      } else {
+        if (activeCategory === 'tickets') animateTicketPairPose(item, 'default', 0.35);
+        else animateComboPose(item, 'default', 0.35);
+        gsap.to(item.position, { x: (i - currentIndex) * 6.5, y: -8.0, z: -4, duration: 0.4, overwrite: "auto" });
+        gsap.to(item.scale, { x: 0.001, y: 0.001, z: 0.001, duration: 0.35, overwrite: "auto" });
+      }
+    });
+    inspectStep(currentStep);
+  } else if (currentMode === 'lineup') {
+    isSingleTicket2D = false;
+    gsap.to(pedestalGroup.scale, { x: 0.001, y: 0.001, z: 0.001, duration: 0.3, overwrite: "auto" });
+    gsap.to(camera.position, { x: 0, z: useCompact ? 13.4 : 11.4, duration: dur, ease: "expo.out", overwrite: "auto" });
+
+    const scTickets = getBaseScale(false, 'tickets');
+    const scCombos = getBaseScale(false, 'combos');
+
+    if (useCompact) {
+      // Modo Celular 9:16: 4 Boletos arriba (2x2), Cápsula "Combos" al centro, 6 Combos abajo (2x3)
+      const tCoords = [
+        { x: -0.82, y: 0.96, z: 1.8 },
+        { x: 0.82, y: 0.96, z: 1.8 },
+        { x: -0.82, y: -0.38, z: 1.8 },
+        { x: 0.82, y: -0.38, z: 1.8 }
+      ];
+      ticketModels.forEach((item, i) => {
+        animateTicketPairPose(item, 'default', dur);
+        gsap.to(item.position, { x: tCoords[i].x, y: tCoords[i].y, z: tCoords[i].z, duration: dur, ease: "expo.out", overwrite: "auto" });
+        gsap.to(item.rotation, { x: 0.04, y: -0.14, z: 0, duration: dur, ease: "expo.out", overwrite: "auto" });
+        gsap.to(item.scale, { x: scTickets, y: scTickets, z: scTickets, duration: dur, ease: "expo.out", overwrite: "auto" });
+      });
+
+      dividerWorldPos.set(0, -1.28, 1.8);
+
+      const cCoords = [
+        { x: -0.82, y: -2.18, z: 1.8 },
+        { x: 0.82, y: -2.18, z: 1.8 },
+        { x: -0.82, y: -3.65, z: 1.8 },
+        { x: 0.82, y: -3.65, z: 1.8 },
+        { x: -0.82, y: -5.12, z: 1.8 },
+        { x: 0.82, y: -5.12, z: 1.8 }
+      ];
+      comboModels.forEach((item, j) => {
+        animateComboPose(item, 'default', dur);
+        gsap.to(item.position, { x: cCoords[j].x, y: cCoords[j].y, z: cCoords[j].z, duration: dur, ease: "expo.out", overwrite: "auto" });
+        gsap.to(item.rotation, { x: 0.06, y: -0.16, z: 0, duration: dur, ease: "expo.out", overwrite: "auto" });
+        gsap.to(item.scale, { x: scCombos, y: scCombos, z: scCombos, duration: dur, ease: "expo.out", overwrite: "auto" });
+      });
+    } else {
+      // Modo Horizontal: 4 Boletos arriba, Cápsula "Combos" al centro, 6 Combos abajo (2 filas de 3)
+      const spacingT = 2.16;
+      const startXT = -((ticketModels.length - 1) * spacingT) / 2;
+      ticketModels.forEach((item, i) => {
+        animateTicketPairPose(item, 'default', dur);
+        gsap.to(item.position, { x: startXT + i * spacingT, y: 0.52, z: 2.0, duration: dur, ease: "expo.out", overwrite: "auto" });
+        gsap.to(item.rotation, { x: 0.04, y: -0.15, z: 0, duration: dur, ease: "expo.out", overwrite: "auto" });
+        gsap.to(item.scale, { x: scTickets, y: scTickets, z: scTickets, duration: dur, ease: "expo.out", overwrite: "auto" });
+      });
+
+      dividerWorldPos.set(0, -0.58, 2.0);
+
+      const cCols = [-2.45, 0, 2.45];
+      const cRows = [-1.62, -3.42];
+      comboModels.forEach((item, j) => {
+        const col = j % 3;
+        const row = Math.floor(j / 3);
+        animateComboPose(item, 'default', dur);
+        gsap.to(item.position, { x: cCols[col], y: cRows[row], z: 2.0, duration: dur, ease: "expo.out", overwrite: "auto" });
+        gsap.to(item.rotation, { x: 0.06, y: -0.16, z: 0, duration: dur, ease: "expo.out", overwrite: "auto" });
+        gsap.to(item.scale, { x: scCombos, y: scCombos, z: scCombos, duration: dur, ease: "expo.out", overwrite: "auto" });
+      });
+    }
+  }
+}
+
+function changeItem(dir) {
+  isSingleTicket2D = false;
+  const activeModels = getActiveModelList();
+  currentIndex = (currentIndex + dir + activeModels.length) % activeModels.length;
+  updatePositions(0.48);
+}
+
+function setMode(m) {
+  if (isCartOpen) {
+    closeCartModal(true);
+  }
+  currentMode = m;
+  isSingleTicket2D = false;
+  if (m === 'detail') currentStep = 0;
+  if (m !== 'lineup') {
+    collectionTargetScrollY = 0;
+    collectionScrollY = 0;
+  }
+
+  document.querySelectorAll('header .nav-btn').forEach((b) => {
+    b.classList.toggle('active', b.getAttribute('data-mode') === m);
+  });
+
+  const showCarouselUI = (m === 'carousel');
+  document.getElementById('carousel-ui').style.opacity = showCarouselUI ? '1' : '0';
+  document.getElementById('carousel-ui').style.pointerEvents = showCarouselUI ? 'auto' : 'none';
+  document.getElementById('carousel-side-switch').classList.toggle('hidden', !showCarouselUI);
+
+  lineupLabelsContainer.classList.toggle('visible', m === 'lineup');
+  document.getElementById('lineup-scroll-ui').classList.toggle('visible', m === 'lineup');
+
+  document.getElementById('detail-panel').classList.toggle('visible', m === 'detail');
+  document.getElementById('side-controls').classList.toggle('visible', m === 'detail');
+  document.getElementById('bg-giant-text').style.opacity = m === 'lineup' ? '1' : '0';
+  document.getElementById('bg-giant-text').style.transform = m === 'lineup' ? 'scale(1) translateZ(0)' : 'scale(0.92) translateZ(0)';
+
+  updatePositions(0.52);
+}
+
+function createAddOrStepperHTML(skuId) {
+  const qty = cartState[skuId] || 0;
+  if (qty <= 0) {
+    return `
+      <button type="button" class="add-to-cart-main-btn" onclick="handleAddToCartClick('${skuId}', this)">
+        <span>🛒 Agregar al carrito</span>
+      </button>
+    `;
+  } else {
+    return `
+      <div class="inline-cart-stepper">
+        <button type="button" class="stepper-side-btn" title="Quitar 1" onclick="changeSkuQtyFromDetail('${skuId}', -1, this)">&#8722;</button>
+        <div class="stepper-center-qty">
+          <span class="qty-num">${qty}</span>
+        </div>
+        <button type="button" class="stepper-side-btn" title="Agregar 1 más" onclick="changeSkuQtyFromDetail('${skuId}', 1, this)">&#43;</button>
+      </div>
+    `;
+  }
+}
+
+function renderDetailPanelContent(animateTransition = true) {
+  const activeData = getActiveDataList();
+  const itemData = activeData[currentIndex];
+  const tagEl = document.getElementById('detail-tag');
+  const titleEl = document.getElementById('detail-title');
+  const listEl = document.getElementById('detail-list');
+
+  const isCombo = activeCategory === 'combos';
+  tagEl.textContent = currentStep === 0
+    ? (isCombo ? "INFORMACIÓN DEL COMBO" : "INFORMACIÓN DEL BOLETO")
+    : "PRECIOS OFICIALES VANTICK";
+  titleEl.textContent = itemData.name;
+  listEl.innerHTML = '';
+
+  if (currentStep === 0) {
+    const bullets = isCombo
+      ? [
+          itemData.contentDesc,
+          ...(itemData.isVIP ? ["Combo exclusivo VIP"] : []),
+          ...COMBO_COMMON_BULLETS
+        ]
+      : TICKET_INFO_BULLETS;
+
+    bullets.forEach(text => {
+      const li = document.createElement('li');
+      li.className = 'menu-info-item';
+      li.innerHTML = `
+        <div class="menu-info-left">
+          <span class="feature-dot" style="background:${itemData.accent}; box-shadow:0 0 8px ${itemData.accent};"></span>
+          <span>${text}</span>
+        </div>
+      `;
+      listEl.appendChild(li);
+    });
+  } else {
+    if (!isCombo && currentIndex === 0) {
+      // Boletos a sala 2D (Opción de 2 boletos por $125 o botón de 1 boleto por $65)
+      const liPairPrice = document.createElement('li');
+      liPairPrice.className = 'menu-info-item clickable-pair';
+      liPairPrice.title = "Seleccionar paquete de 2 boletos";
+      liPairPrice.onclick = () => {
+        if (isSingleTicket2D) toggleSingleTicket2D(false);
+      };
+      liPairPrice.innerHTML = `
+        <div class="menu-info-left">
+          <span class="feature-dot" style="background:${itemData.accent}; box-shadow:0 0 8px ${itemData.accent};"></span>
+          <span>${itemData.prices[0]}</span>
+        </div>
+        ${isSingleTicket2D ? '<span class="pair-return-hint">Ver 2</span>' : ''}
+      `;
+      listEl.appendChild(liPairPrice);
+
+      if (!isSingleTicket2D) {
+        const liPairAdd = document.createElement('li');
+        liPairAdd.className = 'add-to-cart-row';
+        liPairAdd.innerHTML = createAddOrStepperHTML('vt_2d_pair');
+        listEl.appendChild(liPairAdd);
+      }
+
+      const liSingleBtn = document.createElement('li');
+      liSingleBtn.className = 'single-ticket-btn-item';
+      liSingleBtn.innerHTML = `
+        <button type="button" class="single-ticket-cta-btn ${isSingleTicket2D ? 'active' : ''}" id="single-ticket-2d-btn" onclick="toggleSingleTicket2D()">
+          <span class="single-btn-left">
+            <span class="single-btn-icon">🎟️</span>
+            <span>${itemData.prices[1]}</span>
+          </span>
+          <span class="single-btn-badge" id="single-ticket-2d-badge">${isSingleTicket2D ? 'MOSTRANDO 1 ✓' : 'VER 1 BOLETO'}</span>
+        </button>
+      `;
+      listEl.appendChild(liSingleBtn);
+
+      if (isSingleTicket2D) {
+        const liSingleAdd = document.createElement('li');
+        liSingleAdd.className = 'add-to-cart-row';
+        liSingleAdd.innerHTML = createAddOrStepperHTML('vt_2d_single');
+        listEl.appendChild(liSingleAdd);
+      }
+    } else {
+      // Resto de Boletos y todos los 6 Combos de comida
+      const skuObj = itemData.skus[0];
+      const liPrice = document.createElement('li');
+      liPrice.className = 'menu-info-item';
+      liPrice.innerHTML = `
+        <div class="menu-info-left">
+          <span class="feature-dot" style="background:${itemData.accent}; box-shadow:0 0 8px ${itemData.accent};"></span>
+          <span>${itemData.prices[0]}</span>
+        </div>
+      `;
+      listEl.appendChild(liPrice);
+
+      const liAdd = document.createElement('li');
+      liAdd.className = 'add-to-cart-row';
+      liAdd.innerHTML = createAddOrStepperHTML(skuObj.id);
+      listEl.appendChild(liAdd);
+    }
+  }
+
+  if (animateTransition) {
+    const panelElements = [tagEl, titleEl, listEl];
+    gsap.fromTo(panelElements, { opacity: 0.3, x: -6 }, { opacity: 1, x: 0, duration: 0.24, stagger: 0.03, overwrite: "auto" });
+  }
+}
+
+function inspectStep(s) {
+  if (s === 0) isSingleTicket2D = false;
+  currentStep = s;
+
+  const activeModels = getActiveModelList();
+  const item = activeModels[currentIndex];
+  const useCompact = isCompactView();
+  const isCombo = activeCategory === 'combos';
+
+  document.querySelectorAll('.step-btn').forEach((b, i) => b.classList.toggle('active', i === s));
+
+  renderDetailPanelContent(true);
+
+  const baseY = useCompact ? 0.78 : 0.14;
+
+  if (s === 0) {
+    if (isCombo) animateComboPose(item, 'default', 0.52);
+    else animateTicketPairPose(item, 'default', 0.52);
+
+    const targetCamZ = useCompact ? 12.6 : 10.4;
+    gsap.to(item.rotation, { x: isCombo ? 0.08 : 0.04, y: -0.16, z: 0.0, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+    gsap.to(item.position, { y: baseY, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+    gsap.to(camera.position, { z: targetCamZ, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+  } else {
+    if (!isCombo && currentIndex === 0 && isSingleTicket2D) {
+      animateTicketPairPose(item, 'single', 0.52);
+      const targetCamZ = useCompact ? 11.2 : 9.15;
+      gsap.to(item.rotation, { x: -0.05, y: 0.22, z: 0.02, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+      gsap.to(item.position, { y: baseY + 0.05, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+      gsap.to(camera.position, { z: targetCamZ, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+    } else if (isCombo) {
+      animateComboPose(item, 'price', 0.55);
+      const targetCamZ = useCompact ? 11.7 : 9.6;
+      gsap.to(item.rotation, { x: 0.12, y: 0.28, z: 0.04, duration: 0.58, ease: "back.out(1.3)", overwrite: "auto" });
+      gsap.to(item.position, { y: baseY + 0.06, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+      gsap.to(camera.position, { z: targetCamZ, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+    } else {
+      animateTicketPairPose(item, 'price', 0.55);
+      const targetCamZ = useCompact ? 11.8 : 9.6;
+      gsap.to(item.rotation, { x: -0.14, y: 0.38, z: 0.08, duration: 0.58, ease: "back.out(1.3)", overwrite: "auto" });
+      gsap.to(item.position, { y: baseY + 0.08, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+      gsap.to(camera.position, { z: targetCamZ, duration: 0.55, ease: "expo.out", overwrite: "auto" });
+    }
+  }
+}
+
+/* ============================================================================
+   LÓGICA DEL CARRITO, ICONO VOLADOR 2D, SCROLL INTELIGENTE Y WHATSAPP BUSINESS
+   ============================================================================ */
+
+function getTotalCartItemsCount() {
+  return Object.values(cartState).reduce((acc, q) => acc + q, 0);
+}
+
+function getTotalCartMoneyAmount() {
+  return Object.entries(cartState).reduce((acc, [skuId, q]) => {
+    const sku = SKU_CATALOG[skuId];
+    return acc + (sku ? sku.unitPrice * q : 0);
+  }, 0);
+}
+
+function updateCartHeaderBadge(pulse = false) {
+  const totalCount = getTotalCartItemsCount();
+  const badgeEl = document.getElementById('cart-badge-count');
+  const cartBtn = document.getElementById('header-cart-btn');
+  if (!badgeEl || !cartBtn) return;
+
+  badgeEl.textContent = totalCount;
+  badgeEl.classList.toggle('show', totalCount > 0);
+
+  if (pulse) {
+    gsap.fromTo(
+      cartBtn,
+      { scale: 1.2 },
+      { scale: 1.0, duration: 0.34, ease: "back.out(2)", overwrite: "auto" }
+    );
+  }
+}
+
+function animateCartTotalMoney() {
+  const targetTotal = getTotalCartMoneyAmount();
+  const amountEl = document.getElementById('cart-total-amount');
+  const sendBtn = document.getElementById('send-whatsapp-btn');
+
+  if (sendBtn) {
+    sendBtn.disabled = getTotalCartItemsCount() === 0;
+  }
+
+  gsap.to(moneyCounterAnim, {
+    val: targetTotal,
+    duration: 0.32,
+    ease: "power2.out",
+    overwrite: "auto",
+    onUpdate: () => {
+      if (amountEl) {
+        amountEl.textContent = `$${Math.round(moneyCounterAnim.val)}`;
+      }
+    }
+  });
+}
+
+// Genera miniatura 2D tanto para Boletos como para Combos de comida
+function build2DItemThumbSVG(sku, isFlying = false) {
+  const gradId = `thumbGrad_${sku.id}_${isFlying ? 'fly' : 'list'}`;
+
+  if (sku.category === 'combos') {
+    const isIcee = sku.comboType === 'ice_gde';
+    const cupColor = isIcee ? '#0284C7' : sku.primaryBrown;
+    return `
+      <svg viewBox="0 0 120 74" width="100%" height="100%">
+        <defs>
+          <linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="${sku.primaryBrown}"/>
+            <stop offset="100%" stop-color="${sku.secondaryBrown}"/>
+          </linearGradient>
+        </defs>
+        <!-- Palomitas en la cima -->
+        <circle cx="34" cy="18" r="8" fill="#FDE047"/>
+        <circle cx="45" cy="15" r="9" fill="#F59E0B"/>
+        <circle cx="56" cy="18" r="8" fill="#FDE047"/>
+        <!-- Cubeta de palomitas -->
+        <polygon points="22,22 68,22 61,66 29,66" fill="url(#${gradId})" stroke="${sku.foilGold}" stroke-width="2.2"/>
+        <line x1="36" y1="23" x2="38" y2="65" stroke="#FDFBF4" stroke-width="2.5" opacity="0.65"/>
+        <line x1="54" y1="23" x2="52" y2="65" stroke="#FDFBF4" stroke-width="2.5" opacity="0.65"/>
+        <!-- Popote y vaso de bebida -->
+        <polyline points="88,24 93,8 103,6" fill="none" stroke="#DC2626" stroke-width="3.2" stroke-linecap="round"/>
+        <polygon points="72,26 104,26 99,66 77,66" fill="${cupColor}" stroke="${sku.foilGold}" stroke-width="2"/>
+        <rect x="70" y="22" width="36" height="5" rx="2.5" fill="#FDFBF4"/>
+      </svg>
+    `;
+  }
+
+  const secondTicketLayer = !sku.isSingle
+    ? `<path d="M 12,4 H 108 A 5,5 0 0 1 113,9 V 51 A 5,5 0 0 1 108,56 H 12 A 5,5 0 0 1 7,51 V 9 A 5,5 0 0 1 12,4 Z"
+             transform="rotate(-6 60 32) translate(-3, -4)"
+             fill="${sku.secondaryBrown}" stroke="${sku.foilGold}" stroke-width="1.6" opacity="0.85"/>`
+    : '';
+
+  return `
+    <svg viewBox="0 0 120 68" width="100%" height="100%">
+      <defs>
+        <linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="${sku.primaryBrown}"/>
+          <stop offset="100%" stop-color="${sku.secondaryBrown}"/>
+        </linearGradient>
+      </defs>
+      ${secondTicketLayer}
+      <path d="M 10,8 H 34 A 5,5 0 0 0 44,8 H 108 A 6,6 0 0 1 114,14 V 25 A 8,8 0 0 0 114,43 V 54 A 6,6 0 0 1 108,60 H 44 A 5,5 0 0 0 34,60 H 10 A 6,6 0 0 1 4,54 V 43 A 8,8 0 0 0 4,25 V 14 A 6,6 0 0 1 10,8 Z"
+            fill="url(#${gradId})" stroke="${sku.foilGold}" stroke-width="2.2"/>
+      <path d="M 10,9.5 H 35 V 58.5 H 10 A 4.5,4.5 0 0 1 5.5,54 V 43 A 8,8 0 0 0 5.5,25 V 14 A 4.5,4.5 0 0 1 10,9.5 Z"
+            fill="#FDFBF4"/>
+      <line x1="39" y1="14" x2="39" y2="54" stroke="${sku.foilGold}" stroke-width="1.6" stroke-dasharray="3.5 3.5"/>
+      <text x="76" y="36" fill="#FDFBF4" font-size="11.5" font-weight="900" text-anchor="middle" letter-spacing="1">VANTICK</text>
+      <rect x="52" y="42" width="48" height="8" rx="3" fill="${sku.foilGold}"/>
+    </svg>
+  `;
+}
+
+function spawnFlyingTicketToCart(skuId, sourceElement) {
+  const sku = SKU_CATALOG[skuId];
+  const cartBtn = document.getElementById('header-cart-btn');
+  if (!sku || !sourceElement || !cartBtn) {
+    updateCartHeaderBadge(true);
+    return;
+  }
+
+  const vpRect = viewport.getBoundingClientRect();
+  const srcRect = sourceElement.getBoundingClientRect();
+  const destRect = cartBtn.getBoundingClientRect();
+
+  const startX = srcRect.left - vpRect.left + srcRect.width / 2 - 29;
+  const startY = srcRect.top - vpRect.top + srcRect.height / 2 - 18;
+  const endX = destRect.left - vpRect.left + destRect.width / 2 - 29;
+  const endY = destRect.top - vpRect.top + destRect.height / 2 - 18;
+
+  const flyer = document.createElement('div');
+  flyer.className = 'flying-ticket-token';
+  flyer.innerHTML = build2DItemThumbSVG(sku, true);
+  viewport.appendChild(flyer);
+
+  const motion = { t: 0 };
+  const ctrlX = (startX + endX) * 0.5 - 50;
+  const ctrlY = Math.min(startY, endY) - 75;
+
+  gsap.set(flyer, { x: startX, y: startY, scale: 0.85, rotation: -12, opacity: 1 });
+
+  gsap.to(motion, {
+    t: 1,
+    duration: 0.44,
+    ease: "power2.inOut",
+    onUpdate: () => {
+      const p = motion.t;
+      const inv = 1 - p;
+      const curX = inv * inv * startX + 2 * inv * p * ctrlX + p * p * endX;
+      const curY = inv * inv * startY + 2 * inv * p * ctrlY + p * p * endY;
+      const sc = p < 0.4 ? 0.85 + p * 0.75 : 1.15 - (p - 0.4) * 1.35;
+      const rot = -12 + p * 372;
+      gsap.set(flyer, { x: curX, y: curY, scale: Math.max(0.25, sc), rotation: rot });
+    },
+    onComplete: () => {
+      flyer.remove();
+      updateCartHeaderBadge(true);
+    }
+  });
+}
+
+function handleAddToCartClick(skuId, btnEl) {
+  cartState[skuId] = (cartState[skuId] || 0) + 1;
+  spawnFlyingTicketToCart(skuId, btnEl);
+  renderDetailPanelContent(false);
+  animateCartTotalMoney();
+  if (isCartOpen) renderCartItemsList();
+}
+
+function changeSkuQtyFromDetail(skuId, delta, btnEl) {
+  const currentQty = cartState[skuId] || 0;
+  const nextQty = currentQty + delta;
+
+  if (delta > 0) {
+    cartState[skuId] = nextQty;
+    spawnFlyingTicketToCart(skuId, btnEl);
+  } else {
+    if (nextQty <= 0) {
+      delete cartState[skuId];
+    } else {
+      cartState[skuId] = nextQty;
+    }
+    updateCartHeaderBadge(true);
+  }
+
+  renderDetailPanelContent(false);
+  animateCartTotalMoney();
+  if (isCartOpen) renderCartItemsList();
+}
+
+function updateCartScrollLock() {
+  const listEl = document.getElementById('cart-items-list');
+  if (!listEl || listEl.style.display === 'none') return;
+
+  const exceedsVisibleLimit = listEl.scrollHeight > listEl.clientHeight + 2;
+  if (exceedsVisibleLimit) {
+    listEl.style.overflowY = 'auto';
+    listEl.classList.add('scrollable');
+  } else {
+    listEl.scrollTop = 0;
+    listEl.style.overflowY = 'hidden';
+    listEl.classList.remove('scrollable');
+  }
+}
+
+function renderCartItemsList() {
+  const emptyEl = document.getElementById('cart-empty-state');
+  const listEl = document.getElementById('cart-items-list');
+  const entries = Object.entries(cartState).filter(([, q]) => q > 0);
+
+  animateCartTotalMoney();
+
+  if (entries.length === 0) {
+    emptyEl.style.display = 'flex';
+    listEl.style.display = 'none';
+    listEl.innerHTML = '';
+    listEl.classList.remove('scrollable');
+    listEl.style.overflowY = 'hidden';
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  listEl.style.display = 'flex';
+  listEl.innerHTML = '';
+
+  entries.forEach(([skuId, qty]) => {
+    const sku = SKU_CATALOG[skuId];
+    if (!sku) return;
+    const subtotal = sku.unitPrice * qty;
+
+    const card = document.createElement('div');
+    card.className = 'cart-item-card';
+    card.id = `cart-card-${skuId}`;
+    card.innerHTML = `
+      <div class="cart-item-thumb">
+        ${build2DItemThumbSVG(sku, false)}
+      </div>
+      <div class="cart-item-info">
+        <div class="cart-item-name">${sku.name}</div>
+        <div class="cart-item-meta">${qty}x $${sku.unitPrice} &bull; <strong>$${subtotal}</strong></div>
+      </div>
+      <div class="cart-item-controls">
+        <button type="button" class="cart-ctrl-btn" title="Quitar 1 artículo" onclick="changeSkuQtyFromCart('${skuId}', -1)">&#8722;</button>
+        <button type="button" class="cart-ctrl-btn" title="Agregar 1 artículo más" onclick="changeSkuQtyFromCart('${skuId}', 1)">&#43;</button>
+        <button type="button" class="cart-ctrl-btn delete-btn" title="Eliminar artículo" onclick="removeSkuFromCartAnimated('${skuId}')">
+          <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
+      </div>
+    `;
+    listEl.appendChild(card);
+  });
+
+  requestAnimationFrame(updateCartScrollLock);
+}
+
+function changeSkuQtyFromCart(skuId, delta) {
+  const currentQty = cartState[skuId] || 0;
+  const nextQty = currentQty + delta;
+
+  if (nextQty <= 0) {
+    removeSkuFromCartAnimated(skuId);
+    return;
+  }
+
+  cartState[skuId] = nextQty;
+  updateCartHeaderBadge(true);
+  renderCartItemsList();
+  if (currentMode === 'detail' && currentStep === 1) {
+    renderDetailPanelContent(false);
+  }
+}
+
+function removeSkuFromCartAnimated(skuId) {
+  const cardEl = document.getElementById(`cart-card-${skuId}`);
+  if (!cardEl) {
+    delete cartState[skuId];
+    updateCartHeaderBadge(false);
+    renderCartItemsList();
+    if (currentMode === 'detail' && currentStep === 1) renderDetailPanelContent(false);
+    return;
+  }
+
+  cardEl.style.pointerEvents = 'none';
+  const currentHeight = cardEl.offsetHeight;
+  cardEl.style.height = currentHeight + 'px';
+
+  const tl = gsap.timeline({
+    onComplete: () => {
+      delete cartState[skuId];
+      updateCartHeaderBadge(false);
+      renderCartItemsList();
+      if (currentMode === 'detail' && currentStep === 1) {
+        renderDetailPanelContent(false);
+      }
+    }
+  });
+
+  tl.to(cardEl, {
+    borderColor: '#F87171',
+    backgroundColor: 'rgba(220, 38, 38, 0.24)',
+    scale: 0.96,
+    x: -6,
+    duration: 0.1,
+    ease: "power2.out"
+  })
+  .to(cardEl, {
+    x: 95,
+    rotationZ: 3,
+    opacity: 0,
+    duration: 0.2,
+    ease: "power3.in"
+  })
+  .to(cardEl, {
+    height: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    marginTop: 0,
+    marginBottom: -10,
+    borderWidth: 0,
+    duration: 0.16,
+    ease: "power2.inOut"
+  });
+}
+
+function getCartButtonOffsetFromCenter() {
+  const cartBtn = document.getElementById('header-cart-btn');
+  const vpRect = viewport.getBoundingClientRect();
+  if (!cartBtn) return { dx: 0, dy: -200 };
+
+  const btnRect = cartBtn.getBoundingClientRect();
+  const btnCenterX = btnRect.left - vpRect.left + btnRect.width / 2;
+  const btnCenterY = btnRect.top - vpRect.top + btnRect.height / 2;
+
+  return {
+    dx: btnCenterX - vpRect.width / 2,
+    dy: btnCenterY - vpRect.height / 2
+  };
+}
+
+function openCartModal() {
+  if (isCartOpen) return;
+  isCartOpen = true;
+
+  const backdrop = document.getElementById('cart-backdrop');
+  const modal = document.getElementById('cart-modal');
+  const cartBtn = document.getElementById('header-cart-btn');
+
+  if (cartBtn) cartBtn.classList.add('active');
+  renderCartItemsList();
+
+  backdrop.classList.add('open');
+  const { dx, dy } = getCartButtonOffsetFromCenter();
+
+  gsap.killTweensOf([backdrop, modal]);
+  gsap.to(backdrop, { opacity: 1, duration: 0.22, ease: "power2.out" });
+
+  gsap.fromTo(
+    modal,
+    {
+      x: dx,
+      y: dy,
+      scaleX: 0.14,
+      scaleY: 0.09,
+      opacity: 0.15
+    },
+    {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      opacity: 1,
+      duration: 0.38,
+      ease: "expo.out",
+      onComplete: updateCartScrollLock
+    }
+  );
+}
+
+function closeCartModal(instant = false) {
+  if (!isCartOpen) return;
+  isCartOpen = false;
+
+  const backdrop = document.getElementById('cart-backdrop');
+  const modal = document.getElementById('cart-modal');
+  const cartBtn = document.getElementById('header-cart-btn');
+
+  if (cartBtn) cartBtn.classList.remove('active');
+  backdrop.classList.remove('open');
+
+  gsap.killTweensOf([backdrop, modal]);
+
+  if (instant) {
+    gsap.set(backdrop, { opacity: 0 });
+    return;
+  }
+
+  const { dx, dy } = getCartButtonOffsetFromCenter();
+
+  gsap.to(backdrop, { opacity: 0, duration: 0.22, ease: "power2.inOut" });
+  gsap.to(modal, {
+    x: dx,
+    y: dy,
+    scaleX: 0.14,
+    scaleY: 0.09,
+    opacity: 0,
+    duration: 0.26,
+    ease: "power3.inOut"
+  });
+}
+
+function toggleCartModal() {
+  if (isCartOpen) {
+    closeCartModal(false);
+  } else {
+    openCartModal();
+  }
+}
+
+function handleBackdropClick(e) {
+  if (e.target.id === 'cart-backdrop') {
+    closeCartModal(false);
+  }
+}
+
+function goToCollectionFromEmptyCart() {
+  closeCartModal(false);
+  if (currentMode !== 'lineup') {
+    setMode('lineup');
+  }
+}
+
+function sendCartToWhatsApp() {
+  const entries = Object.entries(cartState).filter(([, q]) => q > 0);
+  if (entries.length === 0) return;
+
+  const lines = ["¡Hola!, ¡Gracias por comprar con nosotros!, te envío mi carrito", ""];
+  let grandTotal = 0;
+
+  entries.forEach(([skuId, qty]) => {
+    const sku = SKU_CATALOG[skuId];
+    if (!sku) return;
+    const subtotal = sku.unitPrice * qty;
+    grandTotal += subtotal;
+    lines.push(`• ${qty}x ${sku.name} ($${sku.unitPrice} c/u) = $${subtotal}`);
+  });
+
+  lines.push("");
+  lines.push(`Total: $${grandTotal}`);
+
+  const messageText = lines.join("\n");
+  const whatsappUrl = `https://wa.me/5218143707239?text=${encodeURIComponent(messageText)}`;
+  window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+}
+
+/* ============================================================================
+   INTERACCIÓN TÁCTIL, SWIPE EN CARRUSEL, SCROLL EN COLECCIÓN Y RAYCASTER 3D
+   ============================================================================ */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let isPointerDown = false;
+let touchStartX = 0;
+let touchStartY = 0;
+let lastTouchY = 0;
+let pointerMovedDistance = 0;
+
+container.addEventListener('pointerdown', (e) => {
+  isPointerDown = true;
+  touchStartX = e.clientX;
+  touchStartY = e.clientY;
+  lastTouchY = e.clientY;
+  pointerMovedDistance = 0;
+}, { passive: true });
+
+container.addEventListener('pointermove', (e) => {
+  if (!isPointerDown || isCartOpen) return;
+  const dy = e.clientY - lastTouchY;
+  lastTouchY = e.clientY;
+  pointerMovedDistance = Math.hypot(e.clientX - touchStartX, e.clientY - touchStartY);
+
+  // Deslizamiento vertical fluido hacia abajo/arriba en 3. COLECCIÓN
+  if (currentMode === 'lineup') {
+    const scrollFactor = isCompactView() ? 0.011 : 0.0085;
+    collectionTargetScrollY = Math.max(0, Math.min(maxCollectionScrollY, collectionTargetScrollY - dy * scrollFactor));
+  }
+}, { passive: true });
+
+window.addEventListener('pointerup', () => {
+  isPointerDown = false;
+}, { passive: true });
+
+// Soporte de rueda de ratón o trackpad en 3. COLECCIÓN
+container.addEventListener('wheel', (e) => {
+  if (currentMode !== 'lineup' || isCartOpen) return;
+  e.preventDefault();
+  collectionTargetScrollY = Math.max(0, Math.min(maxCollectionScrollY, collectionTargetScrollY + e.deltaY * 0.0042));
+}, { passive: false });
+
+container.addEventListener('pointerup', (e) => {
+  if (isCartOpen) return;
+
+  const deltaX = e.clientX - touchStartX;
+  const deltaY = e.clientY - touchStartY;
+
+  if (Math.abs(deltaX) > 42 && Math.abs(deltaX) > Math.abs(deltaY) && currentMode === 'carousel') {
+    changeItem(deltaX < 0 ? 1 : -1);
+    return;
+  }
+
+  // Si el usuario estaba deslizando verticalmente la colección, no disparar clic accidental
+  if (currentMode === 'lineup' && pointerMovedDistance > 16) return;
+
+  if (currentMode !== 'carousel' && currentMode !== 'lineup') return;
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+  const targetsToTest = currentMode === 'lineup' ? allInteractiveModels : getActiveModelList();
+  const intersects = raycaster.intersectObjects(targetsToTest, true);
+
+  if (intersects.length > 0) {
+    let obj = intersects[0].object;
+    while (obj.parent && obj.userData.itemIndex === undefined) {
+      obj = obj.parent;
+    }
+    if (obj.userData.itemIndex !== undefined) {
+      const clickedIndex = obj.userData.itemIndex;
+      const clickedCat = obj.userData.category;
+
+      if (currentMode === 'lineup') {
+        selectItemFromLineup(clickedCat, clickedIndex);
+      } else if (currentMode === 'carousel') {
+        if (clickedIndex === currentIndex) {
+          currentStep = 0;
+          setMode('detail');
+        } else {
+          currentIndex = clickedIndex;
+          updatePositions(0.48);
+        }
+      }
+    }
+  }
+}, { passive: true });
+
+// Bucle único sincronizado de alta frecuencia (120 FPS+)
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  // Animación de levitación en Boletos
+  for (let i = 0; i < ticketModels.length; i++) {
+    const item = ticketModels[i];
+    const fw = item.userData.floatWrapper;
+    if (fw) {
+      fw.position.y = Math.sin(t * 2.2 + i) * 0.032;
+      if (currentMode === 'detail' && activeCategory === 'tickets' && i === currentIndex && currentStep === 1) {
+        fw.rotation.z = Math.sin(t * 2.4) * 0.022;
+      } else {
+        fw.rotation.z = 0;
+      }
+    }
+  }
+
+  // Animación atractiva de levitación y giro suave en los 6 Combos 3D
+  for (let j = 0; j < comboModels.length; j++) {
+    const item = comboModels[j];
+    const fw = item.userData.floatWrapper;
+    if (fw) {
+      fw.position.y = Math.sin(t * 2.3 + j * 1.1) * 0.038;
+      if (currentMode === 'detail' && activeCategory === 'combos' && j === currentIndex) {
+        fw.rotation.y = Math.sin(t * 1.5) * 0.14;
+      } else if (currentMode === 'carousel' && activeCategory === 'combos' && j === currentIndex) {
+        fw.rotation.y = Math.sin(t * 1.4) * 0.10;
+      } else {
+        fw.rotation.y = Math.sin(t * 1.2 + j) * 0.05;
+      }
+    }
+  }
+
+  // Interpolación suave del scroll vertical en 3. COLECCIÓN
+  if (currentMode === 'lineup') {
+    collectionScrollY += (collectionTargetScrollY - collectionScrollY) * 0.16;
+    camera.position.y = cameraBaseY - collectionScrollY;
+    cameraTarget.set(0, 0.05 - collectionScrollY, 1.5);
+  } else {
+    camera.position.y = cameraBaseY;
+    cameraTarget.set(0, 0.05, 1.5);
+  }
+
+  camera.lookAt(cameraTarget);
+
+  if (currentMode === 'lineup') {
+    updateLineupLabelsScreenPositions();
+  }
+
+  renderer.render(scene, camera);
+}
+
+function handleResize() {
+  applyViewportDimensions();
+  const w = Math.max(cachedVpWidth, 1);
+  const h = Math.max(cachedVpHeight, 1);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  updatePositions(0.25);
+}
+
+window.addEventListener('resize', handleResize, { passive: true });
+window.addEventListener('load', handleResize, { passive: true });
+if (typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(() => handleResize()).observe(container);
+}
+
+syncCarouselCategoryButtonUI();
+updatePositions(0);
+animate();
+</script>
+</body>
+</html>
